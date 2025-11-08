@@ -226,3 +226,64 @@ export const deleteSupplier = async (supplierId: string): Promise<DeleteSupplier
   );
   return response.data;
 };
+
+export interface UpdateProfilePayload {
+  display_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  theme?: 'light' | 'dark' | 'system';
+  density?: 'comfortable' | 'compact';
+  language?: string;
+  timezone?: string;
+  notifications?: {
+    email?: boolean;
+    marketing?: boolean;
+    system?: boolean;
+  };
+  two_factor_enabled?: boolean;
+}
+
+export interface ProfileResponse {
+  success: boolean;
+  profile?: any;
+  error?: string;
+}
+
+export const updateProfile = async (payload: UpdateProfilePayload): Promise<ProfileResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.patch(
+    `${API_BASE_URL}/profile`,
+    payload,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export const getProfile = async (): Promise<ProfileResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.get(
+    `${API_BASE_URL}/profile`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};

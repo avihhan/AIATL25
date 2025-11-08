@@ -9,7 +9,8 @@ import Suppliers from './pages/Suppliers';
 import Calendar from './pages/Calendar';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/Signup';
-import Home from './pages/home'
+import Home from './pages/Home';
+import AccountSettings from './pages/AccountSettings';
 import './cursor'; 
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
                     <Route path="/orders" element={<Orders />} />
                     <Route path="/suppliers" element={<Suppliers />} />
                     <Route path="/calendar" element={<Calendar />} />
+                    <Route path="/accountsettings" element={<AccountSettings />} />
                   </Routes>
                 </Layout>
               </ProtectedRoute>

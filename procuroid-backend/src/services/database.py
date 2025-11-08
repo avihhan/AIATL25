@@ -681,3 +681,180 @@ def delete_supplier(supplier_id: str) -> dict:
     except Exception as e:
         print(f"Delete supplier error: {e}")
         return {"success": False, "error": str(e)}
+
+
+def update_profile(user_id: str, profile_data: dict) -> dict:
+    """
+    Update a user's profile in the profiles table.
+    
+    Args:
+        user_id: The user's UUID
+        profile_data: Dictionary containing profile information to update
+            - display_name: Optional display name
+            - first_name: Optional first name
+            - last_name: Optional last name
+            - theme: Optional theme preference ('light', 'dark', 'system')
+            - density: Optional density preference ('comfortable', 'compact')
+            - language: Optional language preference
+            - timezone: Optional timezone
+            - notifications: Optional notifications settings (JSONB)
+            - two_factor_enabled: Optional two-factor authentication flag
+        
+    Returns:
+        dict: Response with updated profile or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Prepare the data for update
+        # Start with basic fields that should always exist
+        update_data = {}
+        
+        # Basic profile fields (should exist in all profiles tables)
+        if "display_name" in profile_data:
+            update_data["display_name"] = profile_data["display_name"] if profile_data["display_name"] else None
+        if "first_name" in profile_data:
+            update_data["first_name"] = profile_data["first_name"] if profile_data["first_name"] else None
+        if "last_name" in profile_data:
+            update_data["last_name"] = profile_data["last_name"] if profile_data["last_name"] else None
+        
+        # Extended fields (may not exist if migration hasn't been run)
+        # We'll try to update these, but if they fail, we'll fall back to basic fields only
+        extended_fields = {}
+        if "theme" in profile_data:
+            extended_fields["theme"] = profile_data["theme"]
+        if "density" in profile_data:
+            extended_fields["density"] = profile_data["density"]
+        if "language" in profile_data:
+            extended_fields["language"] = profile_data["language"]
+        if "timezone" in profile_data:
+            extended_fields["timezone"] = profile_data["timezone"]
+        if "notifications" in profile_data:
+            extended_fields["notifications"] = profile_data["notifications"]
+        if "two_factor_enabled" in profile_data:
+            extended_fields["two_factor_enabled"] = profile_data["two_factor_enabled"]
+        
+        # Merge extended fields into update_data
+        update_data.update(extended_fields)
+        
+        # If no fields to update, return error
+        if not update_data:
+            return {"success": False, "error": "No valid fields to update"}
+        
+        # Update the profile
+        # First, try to update with all fields (including extended fields)
+        print(f"Attempting to update profile with data: {update_data}")
+        try:
+            response = supabase_admin.table("profiles").update(update_data).eq("id", user_id).execute()
+        except Exception as e:
+            # If update fails due to missing columns, try with only basic fields
+            error_str = str(e)
+            error_dict = {}
+            if hasattr(e, '__dict__'):
+                error_dict = e.__dict__
+            elif isinstance(e, dict):
+                error_dict = e
+            
+            # Check if it's a column not found error
+            is_column_error = (
+                "PGRST204" in error_str or 
+                "column" in error_str.lower() or 
+                "schema cache" in error_str.lower() or
+                (isinstance(error_dict, dict) and error_dict.get("code") == "PGRST204")
+            )
+            
+            if is_column_error:
+                print(f"Extended columns not found, falling back to basic fields only. Error: {error_str}")
+                # Remove extended fields and try again with only basic fields
+                basic_update_data = {
+                    k: v for k, v in update_data.items() 
+                    if k in ["display_name", "first_name", "last_name"]
+                }
+                if not basic_update_data:
+                    return {
+                        "success": False, 
+                        "error": "Database migration required. Please run the migration to add profile settings columns (theme, density, language, timezone, notifications, two_factor_enabled). See RUN_MIGRATION.md for instructions."
+                    }
+                print(f"Retrying with basic fields only: {basic_update_data}")
+                try:
+                    response = supabase_admin.table("profiles").update(basic_update_data).eq("id", user_id).execute()
+                except Exception as retry_error:
+                    error_msg = f"Failed to update profile even with basic fields: {str(retry_error)}"
+                    print(error_msg)
+                    return {"success": False, "error": error_msg}
+            else:
+                # Re-raise if it's a different error
+                raise
+        
+        # Check for errors in the response
+        if hasattr(response, 'error') and response.error:
+            error_msg = f"Supabase error: {response.error}"
+            print(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        if response.data and len(response.data) > 0:
+            print(f"Profile updated successfully: {response.data[0]}")
+            return {
+                "success": True,
+                "profile": response.data[0]
+            }
+        else:
+            # Profile might not exist, try to create it
+            print(f"Profile not found, attempting to create with data: {update_data}")
+            insert_data = {"id": user_id}
+            insert_data.update(update_data)
+            insert_response = supabase_admin.table("profiles").insert(insert_data).execute()
+            
+            # Check for errors in the insert response
+            if hasattr(insert_response, 'error') and insert_response.error:
+                error_msg = f"Supabase insert error: {insert_response.error}"
+                print(error_msg)
+                return {"success": False, "error": error_msg}
+            
+            if insert_response.data and len(insert_response.data) > 0:
+                print(f"Profile created successfully: {insert_response.data[0]}")
+                return {
+                    "success": True,
+                    "profile": insert_response.data[0]
+                }
+            else:
+                error_msg = "Failed to update or create profile - no data returned"
+                print(error_msg)
+                return {"success": False, "error": error_msg}
+            
+    except Exception as e:
+        error_msg = f"Update profile exception: {str(e)}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": error_msg}
+
+
+def get_profile(user_id: str) -> dict:
+    """
+    Get a user's profile from the profiles table.
+    
+    Args:
+        user_id: The user's UUID
+        
+    Returns:
+        dict: Response with profile data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "profile": response.data[0]
+            }
+        else:
+            return {"success": False, "error": "Profile not found"}
+            
+    except Exception as e:
+        print(f"Get profile error: {e}")
+        return {"success": False, "error": str(e)}

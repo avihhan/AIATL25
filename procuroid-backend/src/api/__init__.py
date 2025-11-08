@@ -14,6 +14,8 @@ from services.database import (
     update_supplier,
     delete_supplier,
     call_quotation_agent,
+    update_profile,
+    get_profile,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
@@ -572,3 +574,56 @@ def quotation_agent_transcript():
 @api_bp.get("/_debug/quote-requests")
 def list_quote_requests():
     return jsonify(QUOTE_REQUESTS)
+
+
+@api_bp.route("/profile", methods=["GET"])
+@require_auth
+def get_profile_endpoint():
+    """
+    Get the authenticated user's profile.
+    """
+    try:
+        user_id = request.user["id"]
+        result = get_profile(user_id)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/profile", methods=["PATCH"])
+@require_auth
+def update_profile_endpoint():
+    """
+    Update the authenticated user's profile.
+    Request body should contain profile information to update.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        user_id = request.user["id"]
+        
+        # Log the incoming data for debugging
+        print(f"Updating profile for user {user_id}: {data}")
+        
+        # Update profile in database
+        result = update_profile(user_id, data)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            # Log the error for debugging
+            error_msg = result.get("error", "Unknown error")
+            print(f"Profile update failed: {error_msg}")
+            return jsonify(result), 400
+    except Exception as e:
+        print(f"Exception in update_profile_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
