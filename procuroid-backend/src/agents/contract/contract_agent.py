@@ -15,23 +15,61 @@ import os
 import re
 
 class ContractAgent:
-    """Pull from QuotationAgent JSON directory"""
-    def __init__(self, contract_json: Dict[str, Any]):
-        self.data = contract_json
+    """
+    ContractAgent generates professional PDF contracts from contract data.
+    Can be initialized with contract data or data can be provided when generating PDF.
+    """
+    def __init__(self, contract_json: Dict[str, Any] = None):
+        """
+        Initialize ContractAgent with optional contract data.
+        
+        Args:
+            contract_json: Optional dictionary containing contract data.
+                          If not provided, must be passed to generate_contract_pdf().
+        """
+        self.data = contract_json or {}
 
     def _format_date(self, date_str: str) -> tuple:
-        """Converts YYYY-MM-DD to formatted date tuple (day, month, year)"""
+        """
+        Converts YYYY-MM-DD to formatted date tuple (day, month, year).
+        Handles empty strings and invalid date formats gracefully.
+        """
+        if not date_str or not isinstance(date_str, str):
+            return ("___", "___", "___")
+        
         try:
-            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            date_obj = datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d")
             day = date_obj.strftime("%d").lstrip('0') or '1'
             month = date_obj.strftime("%B")
             year = date_obj.strftime("%Y")
             return (day, month, year)
-        except:
+        except ValueError:
+            # Try alternative date formats
+            alternative_formats = ["%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%B %d, %Y", "%b %d, %Y"]
+            for fmt in alternative_formats:
+                try:
+                    date_obj = datetime.datetime.strptime(date_str.strip(), fmt)
+                    day = date_obj.strftime("%d").lstrip('0') or '1'
+                    month = date_obj.strftime("%B")
+                    year = date_obj.strftime("%Y")
+                    return (day, month, year)
+                except ValueError:
+                    continue
+            # If all formats fail, return placeholder
+            return ("___", "___", "___")
+        except Exception as e:
+            # Catch any other unexpected errors
+            print(f"Warning: Unexpected error parsing date '{date_str}': {e}")
             return ("___", "___", "___")
 
     def _split_text(self, pdf: FPDF, text: str, max_width: float) -> list:
-        """Splits text into lines that fit within max_width using FPDF's width calculation"""
+        """
+        Splits text into lines that fit within max_width using FPDF's width calculation.
+        Handles extremely long words by breaking them if necessary (e.g., URLs).
+        """
+        if not text:
+            return [""]
+        
         words = text.split()
         if not words:
             return [text]
@@ -40,8 +78,50 @@ class ContractAgent:
         current_line = []
         
         for word in words:
+            # Check if a single word is too long
+            word_width = pdf.get_string_width(word)
+            
+            # If word alone exceeds max_width, break it
+            if word_width > max_width:
+                # Flush current line if it has content
+                if current_line:
+                    lines.append(' '.join(current_line))
+                    current_line = []
+                
+                # Break long word at reasonable points (hyphens, underscores, or force break)
+                if len(word) > 50:
+                    # Try to break at punctuation first
+                    parts = re.split(r'([-/_])', word)
+                    broken_parts = []
+                    current_part = ""
+                    
+                    for part in parts:
+                        test_part = current_part + part
+                        if pdf.get_string_width(test_part) <= max_width:
+                            current_part = test_part
+                        else:
+                            if current_part:
+                                broken_parts.append(current_part)
+                            current_part = part
+                    
+                    if current_part:
+                        broken_parts.append(current_part)
+                    
+                    # If breaking didn't help, force break every 40 characters
+                    if not broken_parts or pdf.get_string_width(broken_parts[0]) > max_width:
+                        broken_parts = [word[i:i+40] for i in range(0, len(word), 40)]
+                    
+                    # Add broken parts as separate lines
+                    for part in broken_parts:
+                        if part:
+                            lines.append(part)
+                else:
+                    # Word is long but manageable - add it (may slightly overflow)
+                    lines.append(word)
+                continue
+            
+            # Normal word processing
             test_line = ' '.join(current_line + [word])
-            # Use FPDF's get_string_width for accurate measurement
             width = pdf.get_string_width(test_line)
             
             if width > max_width and current_line:
@@ -55,21 +135,35 @@ class ContractAgent:
         
         return lines if lines else [text]
 
-    def generate_contract_pdf(self, output_path: str = None) -> str:
+    def generate_contract_pdf(self, contract_data: Dict[str, Any] = None, output_path: str = None) -> str:
         """
         Generates a professional PDF contract and returns its file path.
+        
+        Args:
+            contract_data: Optional contract data dictionary. If provided, overrides self.data.
+                          If not provided, uses self.data from initialization.
+            output_path: Optional output file path. If not provided, generates unique filename.
+        
+        Returns:
+            Absolute path to the generated PDF file.
         """
+        # Use provided contract_data or fall back to self.data
+        data = contract_data if contract_data is not None else self.data
+        
+        if not data:
+            raise ValueError("Contract data is required. Provide it in __init__ or to generate_contract_pdf()")
+        
         pdf = FPDF(format='A4')
         pdf.set_auto_page_break(auto=True, margin=20)
         pdf.add_page()
         
         # Get contract data
-        c = self.data.get("contract_data", {})
-        buyer = self.data.get("buyer_company", {})
-        supplier = self.data.get("supplier_company", {})
-        prod = self.data.get("product_details", {})
-        terms = self.data.get("contract_terms", {})
-        deliver = self.data.get("delivery_information", {})
+        c = data.get("contract_data", {})
+        buyer = data.get("buyer_company", {})
+        supplier = data.get("supplier_company", {})
+        prod = data.get("product_details", {})
+        terms = data.get("contract_terms", {})
+        deliver = data.get("delivery_information", {})
         
         # Replace [Product Name] placeholder if present
         contract_title = c.get("contract_title", "SUPPLIER AGREEMENT")
@@ -355,19 +449,42 @@ class ContractAgent:
         pdf.set_xy(start_x_left, y_pos + 8)
         pdf.ln(2)
         
-        # File output
+        # File output with unique suffix to prevent overwrites
         if not output_path:
             base = c.get('order_reference_id', 'contract')
             safe_base = "".join([x if x.isalnum() or x in ('-', '_') else '_' for x in str(base)])
-            today = datetime.datetime.now().strftime('%Y%m%d')
-            output_path = f"{safe_base}_contract_{today}.pdf"
+            # Get current timestamp once for consistency
+            now = datetime.datetime.now()
+            today = now.strftime('%Y%m%d')
+            timestamp = now.strftime('%H%M%S')
+            # Add microsecond suffix to ensure uniqueness
+            unique_suffix = now.strftime('%f')[:4]  # First 4 digits of microseconds
+            output_path = f"{safe_base}_contract_{today}_{timestamp}_{unique_suffix}.pdf"
+            
+            # If file still exists (unlikely but possible), append counter
+            counter = 1
+            original_path = output_path
+            while os.path.exists(output_path):
+                name_part = original_path.rsplit('.', 1)[0]
+                output_path = f"{name_part}_v{counter}.pdf"
+                counter += 1
+                if counter > 100:  # Safety limit
+                    break
+        
         pdf.output(output_path)
         return os.path.abspath(output_path)
     
     def _extract_state(self, address: str) -> str:
-        """Extracts state/country from address"""
-        # Try to extract state from US address (e.g., "GA", "California")
-        states = {
+        """
+        Extracts state/country from address.
+        Handles both US addresses and international addresses.
+        For international addresses, extracts country or province/state name.
+        """
+        if not address or not isinstance(address, str):
+            return "[STATE/COUNTRY]"
+        
+        # US States mapping
+        us_states = {
             'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
             'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
             'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
@@ -380,23 +497,86 @@ class ContractAgent:
             'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
             'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
             'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
-            'WI': 'Wisconsin', 'WY': 'Wyoming'
+            'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia'
         }
         
-        # Try to find state abbreviation
-        parts = address.split(',')
-        if len(parts) >= 2:
-            state_part = parts[-2].strip().upper()
-            if state_part in states:
-                return states[state_part]
-            # Check if it's a full state name
-            for abbr, name in states.items():
-                if name.upper() in state_part.upper():
-                    return name
+        # Common country names (for international addresses)
+        common_countries = [
+            'United Kingdom', 'UK', 'Canada', 'Australia', 'Germany', 'France', 'Italy',
+            'Spain', 'Netherlands', 'Belgium', 'Switzerland', 'Austria', 'Sweden',
+            'Norway', 'Denmark', 'Finland', 'Poland', 'Portugal', 'Greece', 'Ireland',
+            'Japan', 'China', 'India', 'Brazil', 'Mexico', 'Argentina', 'South Korea',
+            'Singapore', 'Hong Kong', 'New Zealand', 'South Africa', 'United States',
+            'USA', 'US'
+        ]
         
-        # Default to extracted part or generic
+        # Split address by comma
+        parts = [part.strip() for part in address.split(',')]
+        
+        if len(parts) < 2:
+            # If no commas, try to extract from the end (might be single line address)
+            # Return a generic placeholder or the address itself if it's short
+            if len(address) < 50:
+                return address
+            return "[STATE/COUNTRY]"
+        
+        # For US addresses: typically "City, State ZIP" or "City, State, ZIP"
+        # State is usually second-to-last or last part (before ZIP)
+        for i in range(len(parts) - 1, -1, -1):
+            part = parts[i].strip().upper()
+            
+            # Check if it's a US state abbreviation
+            if part in us_states:
+                return us_states[part]
+            
+            # Check if it contains a US state name
+            for abbr, name in us_states.items():
+                if name.upper() in part.upper() or part.upper() in name.upper():
+                    return name
+            
+            # Check if it's a ZIP code pattern (5 digits or 5+4 format)
+            if re.match(r'^\d{5}(-\d{4})?$', part):
+                # Previous part is likely the state
+                if i > 0:
+                    state_part = parts[i - 1].strip().upper()
+                    if state_part in us_states:
+                        return us_states[state_part]
+                    for abbr, name in us_states.items():
+                        if name.upper() in state_part.upper():
+                            return name
+        
+        # For international addresses: typically "City, Province/State, Country"
+        # Country is usually the last part
+        last_part = parts[-1].strip()
+        
+        # Check if last part is a country
+        for country in common_countries:
+            if country.upper() in last_part.upper() or last_part.upper() in country.upper():
+                # If second-to-last exists, it might be a province/state
+                if len(parts) >= 3:
+                    province = parts[-2].strip()
+                    if province and len(province) < 50:  # Reasonable length for a province/state
+                        return f"{province}, {country}"
+                return country
+        
+        # If we have multiple parts, use second-to-last as state/province
+        # and last as country (common international format)
         if len(parts) >= 2:
-            return parts[-2].strip()
+            # Return the second-to-last part (likely state/province) if it exists
+            province_state = parts[-2].strip()
+            if province_state and len(province_state) < 50:
+                # Check if last part looks like a country (not a ZIP code)
+                last_part_clean = parts[-1].strip()
+                if not re.match(r'^\d+$', last_part_clean):  # Not just digits
+                    return f"{province_state}, {last_part_clean}"
+                return province_state
+        
+        # Fallback: return last part if it's reasonable
+        if parts:
+            last = parts[-1].strip()
+            if last and len(last) < 50:
+                return last
+        
         return "[STATE/COUNTRY]"
     
     def _add_section(self, pdf: FPDF, title: str, bold: bool = True):
@@ -424,6 +604,32 @@ class ContractAgent:
         
         pdf.ln(2)
 
+    def generate_contract(self, contract_data: Dict[str, Any] = None, output_path: str = None) -> dict:
+        """
+        Alias for generate_contract_pdf() for compatibility with RootAgent.
+        Returns a dictionary with contract information instead of just the path.
+        
+        Args:
+            contract_data: Optional contract data dictionary.
+            output_path: Optional output file path.
+        
+        Returns:
+            Dictionary containing contract information including file path.
+        """
+        try:
+            pdf_path = self.generate_contract_pdf(contract_data, output_path)
+            return {
+                "status": "success",
+                "contract_path": pdf_path,
+                "message": "Contract PDF generated successfully"
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": "Failed to generate contract PDF"
+            }
+    
     @staticmethod
     def from_json_file(json_path: str) -> 'ContractAgent':
         """
