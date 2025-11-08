@@ -7,3 +7,4 @@ google-genai==0.3.0
 requests==2.31.0
 gunicorn==21.2.0
 twilio==9.2.1
+fpdf2==2.7.6
