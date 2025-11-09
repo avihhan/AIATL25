@@ -1,0 +1,29 @@
+curl -X POST "https://api.us.elevenlabs.io/v1/convai/twilio/outbound-call" \
+-H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjM4MDI5MzRmZTBlZWM0NmE1ZWQwMDA2ZDE0YTFiYWIwMWUzNDUwODMiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiV2lsbCBCdXJuZXIiLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jTFduY1lZVTFLTk43ZVR6MFRIQTRsUXJQUy1IVlZtallmOUsyVzFTbDRPSXlCRld3PXM5Ni1jIiwid29ya3NwYWNlX2lkIjoiOTJkZWJjYzI5ZjBmNGIyMGIwNjIyYThmN2ExZjQ2OTYiLCJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20veGktbGFicyIsImF1ZCI6InhpLWxhYnMiLCJhdXRoX3RpbWUiOjE3NjI1NjkwNzEsInVzZXJfaWQiOiJSWkZ1UWU2OW1sUnI5T2dPMWtWNXdlaUFVZzgzIiwic3ViIjoiUlpGdVFlNjltbFJyOU9nTzFrVjV3ZWlBVWc4MyIsImlhdCI6MTc2MjY1MzQ0MywiZXhwIjoxNzYyNjU3MDQzLCJlbWFpbCI6ImJ1cm5lcndpbGwxMTFAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZ29vZ2xlLmNvbSI6WyIxMDgzOTQ2MTE2MTUyMjE3NjI3MDYiXSwiZW1haWwiOlsiYnVybmVyd2lsbDExMUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJnb29nbGUuY29tIn19.byqjfENjDBhUaWyYHDeArlBGAC57E8JZ-mqREdwRFjViSIntnvG_XDOGEjZei8zHxN2fxi43UzyRhnStXl-q9fx_h10HfcclfuO8Xw7NkgFSTcw0la2pZmKxJgc_NCtTAViJ0JMBjYItGUCnNbRLeckTfFyT5U-oGrRiMW6vvLycyZHJkliW1_LVzPMAxB_JK-6ZiqQ23IEKGLuQq8KtgokSgnHMWc1W4KCicyhDc3sYCokqQ2vCiZreo1dodXz0dLkBCX-5AIULAhegRFwcD5Lgz6joOzYJjiHhBpS-GSBnO2OxPcVAxtVhmN0vNj_IKB4ivESOA-kVIOxphR_Gbg" \
+-H "Content-Type: application/json" \
+-d '@bash (983-1001) '
+
+
+--------------------------------------------------------
+
+curl -X POST "https://api.us.elevenlabs.io/v1/convai/twilio/outbound-call" \
+-H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjM4MDI5MzRmZTBlZWM0NmE1ZWQwMDA2ZDE0YTFiYWIwMWUzNDUwODMiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiV2lsbCBCdXJuZXIiLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jTFduY1lZVTFLTk43ZVR6MFRIQTRsUXJQUy1IVlZtallmOUsyVzFTbDRPSXlCRld3PXM5Ni1jIiwid29ya3NwYWNlX2lkIjoiOTJkZWJjYzI5ZjBmNGIyMGIwNjIyYThmN2ExZjQ2OTYiLCJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20veGktbGFicyIsImF1ZCI6InhpLWxhYnMiLCJhdXRoX3RpbWUiOjE3NjI1NjkwNzEsInVzZXJfaWQiOiJSWkZ1UWU2OW1sUnI5T2dPMWtWNXdlaUFVZzgzIiwic3ViIjoiUlpGdVFlNjltbFJyOU9nTzFrVjV3ZWlBVWc4MyIsImlhdCI6MTc2MjY1MzQ0MywiZXhwIjoxNzYyNjU3MDQzLCJlbWFpbCI6ImJ1cm5lcndpbGwxMTFAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZ29vZ2xlLmNvbSI6WyIxMDgzOTQ2MTE2MTUyMjE3NjI3MDYiXSwiZW1haWwiOlsiYnVybmVyd2lsbDExMUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJnb29nbGUuY29tIn19.byqjfENjDBhUaWyYHDeArlBGAC57E8JZ-mqREdwRFjViSIntnvG_XDOGEjZei8zHxN2fxi43UzyRhnStXl-q9fx_h10HfcclfuO8Xw7NkgFSTcw0la2pZmKxJgc_NCtTAViJ0JMBjYItGUCnNbRLeckTfFyT5U-oGrRiMW6vvLycyZHJkliW1_LVzPMAxB_JK-6ZiqQ23IEKGLuQq8KtgokSgnHMWc1W4KCicyhDc3sYCokqQ2vCiZreo1dodXz0dLkBCX-5AIULAhegRFwcD5Lgz6joOzYJjiHhBpS-GSBnO2OxPcVAxtVhmN0vNj_IKB4ivESOA-kVIOxphR_Gbg" \
+-H "Content-Type: application/json" \
+-d '{
+    "agent_id": "agent_5201k5st2hbje8987zperec4w0db",
+    "agent_phone_number_id": "phnum_5101k9jmg9v5ekd9th7g9r4jt3f8",
+    "to_number": "+14709299380",
+    "conversation_initiation_client_data": {
+        "dynamic_variables": {
+            "productName": "Aluminum Sheets",
+            "quantity": "500 units",
+            "seller_company_name": "MetalWorks Co.",
+            "productDescription": "Aluminum sheets: 3 meters long and 2 millimeters thick",
+            "requiredDeliveryDate": "15th January, 2026",
+            "lowerLimit": "$50/sheet",
+            "location": "Atlanta, Georgia",
+            "buyer_company_name": "Sunrise Construction",
+            "upperLimit": "$70/sheet"
+        }
+    }
+}'

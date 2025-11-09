@@ -306,23 +306,23 @@ const Calendar = () => {
     setShowAddEvent(true);
   };
   
-  const handleOrderSelect = (orderId: string) => {
-    const order = orders.find(o => o.id === orderId);
-    if (order && order.delivery_date) {
-      const deliveryDate = order.delivery_date.includes('T') 
-        ? order.delivery_date.split('T')[0] 
-        : order.delivery_date;
+  // const handleOrderSelect = (orderId: string) => {
+  //   const order = orders.find(o => o.id === orderId);
+  //   if (order && order.delivery_date) {
+  //     const deliveryDate = order.delivery_date.includes('T') 
+  //       ? order.delivery_date.split('T')[0] 
+  //       : order.delivery_date;
       
-      setFormData({
-        ...formData,
-        title: `Delivery - ${order.product_name}`,
-        date: deliveryDate,
-        type: 'delivery',
-        location: order.delivery_location || '',
-        selectedOrderId: order.id
-      });
-    }
-  };
+  //     setFormData({
+  //       ...formData,
+  //       title: `Delivery - ${order.product_name}`,
+  //       date: deliveryDate,
+  //       type: 'delivery',
+  //       location: order.delivery_location || '',
+  //       selectedOrderId: order.id
+  //     });
+  //   }
+  // };
   
   const handleFormChange = (field: string, value: string) => {
     setFormData(prev => ({
