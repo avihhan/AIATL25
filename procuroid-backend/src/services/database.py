@@ -1021,14 +1021,183 @@ def update_quotation(quotation_id: str, updates: dict) -> dict:
         if not supabase_admin:
             return {"success": False, "error": "Supabase admin client not initialized"}
         
-        response = supabase_admin.table("quotations").update(updates).eq("id", quotation_id).execute()
+        print(f"DEBUG: Updating quotation {quotation_id} with updates: {updates}")
+        
+        # First, check if quotation exists
+        check_response = supabase_admin.table("quotations").select("id, status, user_id").eq("id", quotation_id).execute()
+        
+        if not check_response.data or len(check_response.data) == 0:
+            print(f"DEBUG: Quotation {quotation_id} not found in database")
+            return {"success": False, "error": f"Quotation {quotation_id} not found"}
+        
+        quotation_record = check_response.data[0]
+        print(f"DEBUG: Quotation found. Current status: {quotation_record.get('status')}")
+        print(f"DEBUG: Quotation user_id: {quotation_record.get('user_id')}")
+        
+        # Validate the status value
+        valid_statuses = ['pending_approval', 'approved', 'rejected', 'declined']
+        new_status = updates.get('status')
+        if new_status and new_status not in valid_statuses:
+            return {"success": False, "error": f"Invalid status: {new_status}. Must be one of: {valid_statuses}"}
+        
+        # Don't manually set updated_at - let the database handle it with its default or trigger
+        # Just update the status field
+        print(f"DEBUG: Updates to apply: {updates}")
+        
+        # Perform the update - Supabase returns the updated row by default
+        try:
+            # Update the quotation (Supabase Python client returns updated data automatically)
+            response = supabase_admin.table("quotations").update(updates).eq("id", quotation_id).execute()
+            
+            # Supabase update might not return data by default, so we'll verify by fetching
+            # First check if response has data (some Supabase versions return it)
+            if hasattr(response, 'data') and response.data and len(response.data) > 0:
+                updated_quotation = response.data[0]
+                print(f"DEBUG: Successfully updated quotation. New status: {updated_quotation.get('status')}")
+                return {
+                    "success": True,
+                    "quotation": updated_quotation
+                }
+            
+            # If no data in response, fetch the updated record to verify
+            print(f"DEBUG: Fetching updated quotation to verify...")
+            verify_response = supabase_admin.table("quotations").select("*").eq("id", quotation_id).execute()
+            if verify_response.data and len(verify_response.data) > 0:
+                verified_quotation = verify_response.data[0]
+                print(f"DEBUG: Verified quotation status: {verified_quotation.get('status')}")
+                # Check if the update actually took effect
+                if verified_quotation.get("status") == updates.get("status"):
+                    return {
+                        "success": True,
+                        "quotation": verified_quotation
+                    }
+                else:
+                    return {"success": False, "error": f"Update failed - status is still {verified_quotation.get('status')}, expected {updates.get('status')}"}
+            else:
+                print(f"DEBUG: Quotation not found after update attempt")
+                return {"success": False, "error": "Failed to update quotation - quotation not found after update"}
+        except Exception as update_error:
+            print(f"DEBUG: Exception during update: {update_error}")
+            import traceback
+            traceback.print_exc()
+            raise  # Re-raise to be caught by outer try-except
+                
+    except Exception as e:
+        print(f"Update quotation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+def get_quotation_by_id(quotation_id: str) -> dict:
+    """
+    Get a quotation by ID.
+    
+    Args:
+        quotation_id: The quotation UUID
+        
+    Returns:
+        dict: Response with quotation data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        response = supabase_admin.table("quotations").select("*").eq("id", quotation_id).execute()
         
         if response.data and len(response.data) > 0:
             return {
                 "success": True,
                 "quotation": response.data[0]
             }
-        return {"success": False, "error": "Failed to update quotation"}
+        return {"success": False, "error": "Quotation not found"}
     except Exception as e:
-        print(f"Update quotation error: {e}")
+        print(f"Get quotation by id error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def create_contract(
+    quotation_id: str,
+    user_id: str,
+    supplier_id: Optional[str],
+    supplier_name: str,
+    contract_data: dict,
+    pdf_url: str,
+    pdf_path: str
+) -> dict:
+    """
+    Create a contract record in the database.
+    
+    Args:
+        quotation_id: The quotation UUID
+        user_id: The user's UUID
+        supplier_id: The supplier's UUID (optional)
+        supplier_name: The supplier's name
+        contract_data: JSON contract data
+        pdf_url: Public URL to the PDF
+        pdf_path: Path to the PDF in storage
+        
+    Returns:
+        dict: Response with contract data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        contract_record = {
+            "quotation_id": quotation_id,
+            "user_id": user_id,
+            "supplier_id": supplier_id,
+            "supplier_name": supplier_name,
+            "contract_data": contract_data,
+            "pdf_url": pdf_url,
+            "pdf_path": pdf_path,
+            "status": "active"
+        }
+        
+        response = supabase_admin.table("contracts").insert(contract_record).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "contract": response.data[0]
+            }
+        return {"success": False, "error": "Failed to create contract"}
+    except Exception as e:
+        print(f"Create contract error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+def get_contracts(user_id: str) -> dict:
+    """
+    Get all contracts for a user.
+    
+    Args:
+        user_id: The user's UUID
+        
+    Returns:
+        dict: Response with contracts or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        response = supabase_admin.table("contracts").select("*").eq("user_id", user_id).execute()
+        
+        # Sort by created_at in descending order (most recent first)
+        if response.data:
+            response.data.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        contracts = response.data if response.data else []
+        
+        return {
+            "success": True,
+            "contracts": contracts
+        }
+    except Exception as e:
+        print(f"Get contracts error: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}

@@ -446,6 +446,70 @@ export const updateQuotation = async (quotationId: string, payload: UpdateQuotat
   return response.data;
 };
 
+export interface GenerateContractResponse {
+  success: boolean;
+  contract?: any;
+  pdf_url?: string;
+  error?: string;
+}
+
+export const generateContract = async (quotationId: string): Promise<GenerateContractResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.post(
+    `${API_BASE_URL}/quotations/${encodeURIComponent(quotationId)}/generate-contract`,
+    {},
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface Contract {
+  id: string;
+  quotation_id: string;
+  user_id: string;
+  supplier_id?: string;
+  supplier_name: string;
+  contract_data: any;
+  pdf_url: string;
+  pdf_path: string;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface GetContractsResponse {
+  success: boolean;
+  contracts?: Contract[];
+  error?: string;
+}
+
+export const getContracts = async (): Promise<GetContractsResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.get(
+    `${API_BASE_URL}/contracts`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
 // ElevenLabs API Configuration from environment variables
 const ELEVENLABS_API_URL = 'https://api.us.elevenlabs.io/v1/convai/twilio/outbound-call';
 const ELEVENLABS_BEARER_TOKEN = import.meta.env.VITE_ELEVENLABS_BEARER_TOKEN;

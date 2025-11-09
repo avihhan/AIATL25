@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Suppliers from './pages/Suppliers';
 import Calendar from './pages/Calendar';
+import Contracts from './pages/Contracts';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/Signup';
 import Home from './pages/Home'
@@ -39,6 +40,7 @@ function App() {
                       <Route path="/orders" element={<Orders />} />
                       <Route path="/suppliers" element={<Suppliers />} />
                       <Route path="/calendar" element={<Calendar />} />
+                      <Route path="/contracts" element={<Contracts />} />
                       <Route path="/accountsettings" element={<AccountSettings />} />
                     </Routes>
                   </Layout>

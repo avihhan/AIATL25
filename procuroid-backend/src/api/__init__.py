@@ -1,8 +1,14 @@
 from flask import Blueprint, request, jsonify
 from functools import wraps
 import json
+import os
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Any
+try:
+    from agents.contract.contract_agent import ContractAgent
+except ImportError as e:
+    print(f"WARNING: Could not import ContractAgent: {e}")
+    ContractAgent = None
 from services.database import (
     verify_user_token,
     sign_up_user,
@@ -21,7 +27,10 @@ from services.database import (
     get_orders,
     get_quotations,
     update_quotation,
-    supabase,
+    get_quotation_by_id,
+    create_contract,
+    get_contracts,
+    supabase_admin,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import (
@@ -45,6 +54,10 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Allow OPTIONS requests to pass through (CORS preflight)
+        if request.method == 'OPTIONS':
+            return jsonify({}), 200
+        
         # Get the Authorization header
         auth_header = request.headers.get('Authorization')
         
@@ -710,16 +723,30 @@ def get_job_quotations(job_id: str):
     Returns detailed comparison data for frontend display.
     """
     
+    if not supabase_admin:
+        return jsonify({
+            "success": False,
+            "error": "Database connection not available"
+        }), 500
+    
     try:
         # Fetch all quotations for this job
-        quotations = supabase.table("quotations")\
+        # Note: Ordering by JSON fields may not work directly, so we'll sort in Python
+        quotations = supabase_admin.table("quotations")\
             .select("*, suppliers(*)")\
             .eq("job_id", job_id)\
             .order("comparison_metrics->overall_recommendation_score", ascending=False)\
             .execute()
         
+        # Sort by overall_recommendation_score in Python if available
+        if quotations.data:
+            quotations.data.sort(
+                key=lambda q: q.get("comparison_metrics", {}).get("overall_recommendation_score", 0),
+                reverse=True
+            )
+        
         # Fetch conversation analyses
-        analyses = supabase.table("conversation_analyses")\
+        analyses = supabase_admin.table("conversation_analyses")\
             .select("*")\
             .execute()
         
@@ -802,8 +829,14 @@ def _calculate_quotation_summary(quotations: List[Dict]) -> Dict:
 def get_job_meetings(job_id: str):
     """Get all meeting requests for a job"""
     
+    if not supabase_admin:
+        return jsonify({
+            "success": False,
+            "error": "Database connection not available"
+        }), 500
+    
     try:
-        meetings = supabase.table("meeting_requests")\
+        meetings = supabase_admin.table("meeting_requests")\
             .select("*, suppliers(*)")\
             .eq("job_id", job_id)\
             .order("urgency", ascending=False)\
@@ -830,8 +863,14 @@ def get_quotation_comparison(job_id: str):
     Optimized for frontend comparison view.
     """
     
+    if not supabase_admin:
+        return jsonify({
+            "success": False,
+            "error": "Database connection not available"
+        }), 500
+    
     try:
-        quotations = supabase.table("quotations")\
+        quotations = supabase_admin.table("quotations")\
             .select("*")\
             .eq("job_id", job_id)\
             .execute()
@@ -929,7 +968,7 @@ def update_profile_endpoint():
         if result.get("success"):
             return jsonify(result), 200
         else:
-            return jsonify(result), 400
+            return jsonify(result), 500
     except Exception as e:
         print(f"Exception in update_profile_endpoint: {e}")
         import traceback
@@ -1032,24 +1071,278 @@ def update_quotation_endpoint(quotation_id):
     }
     """
     try:
+        user_info = request.user
+        user_id = user_info.get("id")
+        
+        print(f"DEBUG update_quotation_endpoint: quotation_id={quotation_id}, user_id={user_id}")
+        
         data = request.get_json()
+        print(f"DEBUG update_quotation_endpoint: request data={data}")
         
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"success": False, "error": "No data provided"}), 400
         
         # Only allow updating status for now
         allowed_fields = ["status"]
         updates = {k: v for k, v in data.items() if k in allowed_fields}
         
         if not updates:
-            return jsonify({"error": "No valid fields to update"}), 400
+            return jsonify({"success": False, "error": "No valid fields to update"}), 400
+        
+        print(f"DEBUG update_quotation_endpoint: updates to apply={updates}")
         
         result = update_quotation(quotation_id, updates)
+        
+        print(f"DEBUG update_quotation_endpoint: result={result}")
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            # Return the error with more details
+            error_msg = result.get("error", "Unknown error")
+            print(f"Update quotation failed: {error_msg}")
+            return jsonify({
+                "success": False, 
+                "error": error_msg
+            }), 500
+    except Exception as e:
+        error_message = f"Exception in update_quotation_endpoint: {str(e)}"
+        print(error_message)
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False, 
+            "error": error_message
+        }), 500
+
+
+def _transform_quotation_to_contract_data(quotation: dict, user_info: dict) -> dict:
+    """
+    Transform quotation data into contract agent format.
+    """
+    quotation_data = quotation.get("quotation_data", {})
+    supplier_name = quotation.get("supplier_name", "Unknown Supplier")
+    
+    # Get current date for contract
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Build contract data structure
+    contract_data = {
+        "contract_data": {
+            "contract_title": "SUPPLIER AGREEMENT",
+            "date_of_agreement": today,
+            "order_reference_id": quotation.get("id", "N/A")
+        },
+        "buyer_company": {
+            "name": user_info.get("user_metadata", {}).get("company_name", "Buyer Company"),
+            "registration_number": user_info.get("user_metadata", {}).get("registration_number", "REG-XXXXX"),
+            "address": user_info.get("user_metadata", {}).get("address", "Address Not Provided"),
+            "contact_information": {
+                "buyer_name": user_info.get("user_metadata", {}).get("display_name", user_info.get("email", "Buyer")),
+                "title": user_info.get("user_metadata", {}).get("title", "Procurement Manager"),
+                "email": user_info.get("email", "buyer@example.com")
+            }
+        },
+        "supplier_company": {
+            "name": supplier_name,
+            "registration_number": "REG-XXXXX",
+            "address": "Address Not Provided",
+            "contact_information": {
+                "supplier_name": supplier_name,
+                "title": "Sales Representative",
+                "email": "supplier@example.com"
+            }
+        },
+        "product_details": {
+            "product_name": quotation_data.get("product_name", "Product"),
+            "sku": quotation_data.get("sku", "SKU-XXXXX"),
+            "description": quotation_data.get("description", "Product description"),
+            "unit_quantity": str(quotation_data.get("quantity", 0)),
+            "unit_of_measure": quotation_data.get("unit_of_measurement", "units"),
+            "agreed_unit_price": float(quotation_data.get("unit_price", 0) or 0),
+            "total_contract_value": float(quotation_data.get("total_price", quotation_data.get("price", 0)) or 0),
+            "currency": quotation_data.get("currency", "USD")
+        },
+        "contract_terms": {
+            "payment_terms": quotation_data.get("payment_terms", "Net 30"),
+            "warranty_period": "Standard warranty as per manufacturer specifications.",
+            "indemnification_limit": "Capped at the total contract value.",
+            "termination_clause": "Standard termination with 60-day written notice; immediate termination for material breach.",
+            "governing_law": "State of Georgia",
+            "dispute_resolution": "Binding arbitration in Atlanta, GA."
+        },
+        "delivery_information": {
+            "shipping_address": user_info.get("user_metadata", {}).get("delivery_address", "Address Not Provided"),
+            "delivery_type": "Standard Delivery",
+            "required_delivery_date": quotation_data.get("delivery_time", "TBD"),
+            "inspection_period_days": "7",
+            "late_delivery_penalty": "As per contract terms"
+        }
+    }
+    
+    return contract_data
+
+
+@api_bp.route("/quotations/<quotation_id>/generate-contract", methods=["POST"])
+@require_auth
+def generate_contract_endpoint(quotation_id: str):
+    """
+    Generate a contract PDF from an approved quotation and upload it to Supabase storage.
+    """
+    try:
+        user_info = request.user
+        user_id = user_info.get("id")
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID not found"}), 400
+        
+        # Get quotation
+        quotation_result = get_quotation_by_id(quotation_id)
+        if not quotation_result.get("success"):
+            return jsonify({"success": False, "error": "Quotation not found"}), 404
+        
+        quotation = quotation_result["quotation"]
+        
+        # Check if ContractAgent is available
+        if ContractAgent is None:
+            return jsonify({
+                "success": False, 
+                "error": "ContractAgent not available. Please install fpdf2: pip install fpdf2"
+            }), 500
+        
+        # Transform quotation data to contract format
+        contract_data = _transform_quotation_to_contract_data(quotation, user_info)
+        
+        # Generate PDF using ContractAgent
+        try:
+            contract_agent = ContractAgent(contract_data)
+            pdf_path = contract_agent.generate_contract_pdf()
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                "success": False, 
+                "error": f"Failed to generate PDF: {str(e)}"
+            }), 500
+        
+        # Read the PDF file
+        with open(pdf_path, 'rb') as f:
+            pdf_content = f.read()
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"contracts/{user_id}/{quotation_id}_{timestamp}.pdf"
+        
+        # Upload to Supabase storage
+        if not supabase_admin:
+            return jsonify({"success": False, "error": "Supabase admin client not initialized"}), 500
+        
+        # Upload to storage bucket (bucket name: 'contracts')
+        try:
+            print(f"Attempting to upload PDF to storage bucket 'contracts' with filename: {filename}")
+            
+            # Upload the file
+            storage_response = supabase_admin.storage.from_("contracts").upload(
+                filename,
+                pdf_content,
+                file_options={"content-type": "application/pdf", "upsert": "true"}
+            )
+            
+            print(f"Storage upload response: {storage_response}")
+            
+            # Construct public URL manually
+            supabase_url = os.getenv("SUPABASE_URL", "")
+            supabase_url = supabase_url.rstrip('/')
+            pdf_url = f"{supabase_url}/storage/v1/object/public/contracts/{filename}"
+            
+            print(f"PDF uploaded successfully. URL: {pdf_url}")
+            
+        except Exception as e:
+            print(f"Error uploading to Supabase storage: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            error_str = str(e).lower()
+            if "bucket" in error_str and "not found" in error_str:
+                error_message = "Storage bucket 'contracts' not found. Please create it in Supabase Dashboard."
+            elif "403" in error_str or "forbidden" in error_str:
+                error_message = "Permission denied. Please check storage bucket permissions."
+            else:
+                error_message = f"Failed to upload PDF to storage: {str(e)}"
+            
+            # Try to delete the local PDF file
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
+            
+            return jsonify({"success": False, "error": error_message}), 500
+        
+        # Create contract record in database
+        contract_result = create_contract(
+            quotation_id=quotation_id,
+            user_id=user_id,
+            supplier_id=quotation.get("supplier_id"),
+            supplier_name=quotation.get("supplier_name", "Unknown Supplier"),
+            contract_data=contract_data,
+            pdf_url=pdf_url,
+            pdf_path=filename
+        )
+        
+        if not contract_result.get("success"):
+            # Try to delete from storage and local file
+            try:
+                supabase_admin.storage.from_("contracts").remove([filename])
+            except:
+                pass
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
+            return jsonify({"success": False, "error": "Failed to create contract record"}), 500
+        
+        # Clean up local PDF file
+        try:
+            os.remove(pdf_path)
+        except:
+            pass
+        
+        return jsonify({
+            "success": True,
+            "contract": contract_result["contract"],
+            "pdf_url": pdf_url
+        }), 200
+        
+    except Exception as e:
+        print(f"Exception in generate_contract_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/contracts", methods=["GET"])
+@require_auth
+def get_contracts_endpoint():
+    """
+    Get all contracts for the authenticated user.
+    """
+    try:
+        user_info = request.user
+        user_id = user_info.get("id")
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "User ID not found"}), 400
+        
+        result = get_contracts(user_id)
         
         if result.get("success"):
             return jsonify(result), 200
         else:
             return jsonify(result), 500
+            
     except Exception as e:
-        print(f"Exception in update_quotation_endpoint: {e}")
+        print(f"Exception in get_contracts_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500

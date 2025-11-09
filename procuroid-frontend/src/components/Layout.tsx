@@ -5,6 +5,7 @@ import {
   ShoppingCart,
   Users,
   Calendar as CalendarIcon,
+  FileText,
   Plus,
   Bell,
   ChevronDown,
@@ -99,6 +100,7 @@ const Layout = ({ children }: LayoutProps) => {
     { name: 'Orders', href: '/orders', icon: ShoppingCart },
     { name: 'Suppliers', href: '/suppliers', icon: Users },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
+    { name: 'Contracts', href: '/contracts', icon: FileText },
   ];
 
   return (

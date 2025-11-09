@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../lib/supabase';
-import { getOrders, getQuotations, updateQuotation, type Quotation } from '../api/apiCalls';
+import { getOrders, getQuotations, updateQuotation, generateContract, type Quotation } from '../api/apiCalls';
 
 interface Order {
   id: string;
@@ -326,15 +326,33 @@ const Dashboard = () => {
 
   const handleApprove = async (quotationId: string) => {
     try {
-      const response = await updateQuotation(quotationId, { status: 'approved' });
-      if (response.success) {
+      // First, update the quotation status to approved
+      const updateResponse = await updateQuotation(quotationId, { status: 'approved' });
+      if (!updateResponse.success) {
+        console.error('Failed to approve quotation:', updateResponse.error);
+        alert('Failed to approve quotation: ' + (updateResponse.error || 'Unknown error'));
+        return;
+      }
+
+      // Then, generate the contract PDF
+      try {
+        const contractResponse = await generateContract(quotationId);
+        if (contractResponse.success) {
         // Remove the approved quotation from the list
+          setPendingApprovals(prev => prev.filter(q => q.id !== quotationId));
+          // Optionally refresh the list to ensure consistency
+          await fetchPendingApprovals();
+          alert('Quotation approved and contract generated successfully!');
+        } else {
+          console.error('Failed to generate contract:', contractResponse.error);
+          alert('Quotation approved but failed to generate contract: ' + (contractResponse.error || 'Unknown error'));
+        }
+      } catch (contractErr: any) {
+        console.error('Error generating contract:', contractErr);
+        // Even if contract generation fails, the quotation is still approved
         setPendingApprovals(prev => prev.filter(q => q.id !== quotationId));
-        // Optionally refresh the list to ensure consistency
         await fetchPendingApprovals();
-      } else {
-        console.error('Failed to approve quotation:', response.error);
-        alert('Failed to approve quotation: ' + (response.error || 'Unknown error'));
+        alert('Quotation approved but contract generation failed: ' + contractErr.message);
       }
     } catch (err: any) {
       console.error('Error approving quotation:', err);

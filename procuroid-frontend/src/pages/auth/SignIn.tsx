@@ -9,6 +9,7 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showSplash] = useState(false); // 🔹 new
   const navigate = useNavigate();
 
   const onSubmit = async (e: React.FormEvent) => {
