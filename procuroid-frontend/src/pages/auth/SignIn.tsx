@@ -60,10 +60,11 @@ export default function SignIn() {
       </nav>
       {/* Background Image */}
       <img
-        src="/src/assets/background.png"
+        src="/assets/background.png"
         alt="Background"
         className="absolute inset-0 w-full h-full object-cover z-0 filter grayscale-[50%]"
       />
+
 
       {/* Optional overlay to control opacity */}
       <div className="absolute inset-0 bg-black/20 z-0"></div>
