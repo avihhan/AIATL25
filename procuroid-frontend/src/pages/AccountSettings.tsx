@@ -185,18 +185,6 @@ export default function AccountSettings() {
         }
     };
 
-    const handleDeleteAccount = async () => {
-        if (!window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
-        try {
-            const { error } = await supabase.rpc('delete_user');
-            if (error) throw error;
-            await supabase.auth.signOut();
-            navigate('/goodbye');
-        } catch (err: any) {
-            setError(err?.message || 'Failed to delete account.');
-        }
-    };
-
     // ---------- STYLES ----------
     const btnPrimary = 'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition';
     const btnSecondary = 'inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-200 transition';
