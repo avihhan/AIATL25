@@ -19,7 +19,7 @@ interface OrderFormData {
   productCertification: string;
 
   // Step 2 — Order Details
-  quantityRequired: string;
+  quantity: string;
   unitOfMeasurement: string;
   unitPrice: string;
   lowerLimit: string;
@@ -47,7 +47,7 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
     productSpecifications: '',
     productCertification: '',
 
-    quantityRequired: '',
+    quantity: '',
     unitOfMeasurement: '',
     unitPrice: '',
     lowerLimit: '',
@@ -86,7 +86,7 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
 
   const canProceedStep2 = useMemo(() => {
     return Boolean(
-      formData.quantityRequired !== '' &&
+      formData.quantity !== '' &&
       formData.unitOfMeasurement.trim() &&
       formData.unitPrice !== '' &&
       formData.currency.trim() &&
@@ -107,14 +107,14 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
   }, [formData]);
 
   useEffect(() => {
-    const q = parseFloat(formData.quantityRequired || '');
+    const q = parseFloat(formData.quantity || '');
     const p = parseFloat(formData.unitPrice || '');
     if (!isNaN(q) && !isNaN(p)) {
       setFormData(prev => ({ ...prev, totalPriceEstimate: String(q * p) }));
     } else {
       setFormData(prev => ({ ...prev, totalPriceEstimate: '' }));
     }
-  }, [formData.quantityRequired, formData.unitPrice]);
+  }, [formData.quantity, formData.unitPrice]);
 
   const numericUnitPrice = parseFloat(formData.unitPrice || '');
   const hasUnitPrice = !isNaN(numericUnitPrice) && numericUnitPrice > 0;
@@ -367,8 +367,8 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <RequiredLabel required>Quantity Required</RequiredLabel>
-                  <input type="number" name="quantityRequired" value={formData.quantityRequired} onChange={handleInputChange} className="input-field" required />
+                  <RequiredLabel required>Quantity</RequiredLabel>
+                  <input type="number" name="quantity" value={formData.quantity} onChange={handleInputChange} className="input-field" required />
                 </div>
                 <div>
                   <RequiredLabel required>Unit of Measurement</RequiredLabel>
@@ -559,7 +559,7 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
                   <button type="button" className="text-primary-600 text-sm" onClick={() => setStep(2)}>Edit</button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
-                  <div><span className="font-medium">Quantity:</span> {formData.quantityRequired} {formData.unitOfMeasurement}</div>
+                  <div><span className="font-medium">Quantity:</span> {formData.quantity} {formData.unitOfMeasurement}</div>
                   <div><span className="font-medium">Unit Price:</span> {formData.unitPrice} {formData.currency}</div>
                   <div><span className="font-medium">Total Estimate:</span> {formData.totalPriceEstimate} {formData.currency}</div>
                   <div><span className="font-medium">Lower Limit:</span> {formData.lowerLimit}</div>

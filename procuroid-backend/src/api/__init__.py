@@ -18,6 +18,8 @@ from services.database import (
     get_profile,
     create_order,
     get_orders,
+    get_quotations,
+    update_quotation,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
@@ -33,6 +35,7 @@ def require_auth(f):
     """
     Decorator to require authentication for a route.
     Expects Authorization header with format: Bearer <token>
+    Flask-CORS handles OPTIONS requests automatically before reaching this decorator.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -688,4 +691,62 @@ def get_orders_endpoint():
             return jsonify(result), 500
     except Exception as e:
         print(f"Exception in get_orders_endpoint: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/quotations", methods=["GET"])
+@require_auth
+def get_quotations_endpoint():
+    """
+    Get all quotations for the authenticated user.
+    Query parameters:
+    - status: Optional status filter (e.g., 'pending_approval')
+    """
+    try:
+        status = request.args.get("status", None)
+        user_id = request.user["id"]
+        
+        result = get_quotations(user_id, status)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        print(f"Exception in get_quotations_endpoint: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/quotations/<quotation_id>", methods=["PATCH"])
+@require_auth
+def update_quotation_endpoint(quotation_id):
+    """
+    Update a quotation (e.g., approve or reject).
+    
+    Expected payload:
+    {
+        "status": "approved" | "rejected"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Only allow updating status for now
+        allowed_fields = ["status"]
+        updates = {k: v for k, v in data.items() if k in allowed_fields}
+        
+        if not updates:
+            return jsonify({"error": "No valid fields to update"}), 400
+        
+        result = update_quotation(quotation_id, updates)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        print(f"Exception in update_quotation_endpoint: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

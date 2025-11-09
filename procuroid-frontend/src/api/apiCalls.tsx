@@ -294,7 +294,7 @@ export interface OrderPayload {
   productDescription: string;
   productSpecifications?: string;
   productCertification?: string;
-  quantityRequired: string;
+  quantity: string;
   unitOfMeasurement: string;
   unitPrice?: string;
   lowerLimit?: string;
@@ -357,6 +357,85 @@ export const getOrders = async (status?: string): Promise<GetOrdersResponse> => 
 
   const response = await axios.get(
     `${API_BASE_URL}/orders${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface Quotation {
+  id: string;
+  supplier_id?: string;
+  supplier_name?: string;
+  quotation_data?: {
+    price?: number;
+    unit_price?: number;
+    total_price?: number;
+    currency?: string;
+    delivery_time?: string;
+    payment_terms?: string;
+    quantity?: number;
+    unit_of_measurement?: string;
+  };
+  status: string;
+  reason?: string;
+  created_at?: string;
+}
+
+export interface GetQuotationsResponse {
+  success: boolean;
+  quotations?: Quotation[];
+  error?: string;
+}
+
+export const getQuotations = async (status?: string): Promise<GetQuotationsResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const params = new URLSearchParams();
+  if (status) {
+    params.append('status', status);
+  }
+
+  const response = await axios.get(
+    `${API_BASE_URL}/quotations${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface UpdateQuotationPayload {
+  status: 'approved' | 'rejected';
+}
+
+export interface UpdateQuotationResponse {
+  success: boolean;
+  quotation?: Quotation;
+  error?: string;
+}
+
+export const updateQuotation = async (quotationId: string, payload: UpdateQuotationPayload): Promise<UpdateQuotationResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.patch(
+    `${API_BASE_URL}/quotations/${encodeURIComponent(quotationId)}`,
+    payload,
     {
       headers: {
         'Authorization': `Bearer ${session.access_token}`
