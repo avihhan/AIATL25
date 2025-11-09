@@ -30,19 +30,34 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'procuroid-backend'
+      - 'procuroid'  # Service name (changed from procuroid-backend to match existing)
       - '--image'
       - 'gcr.io/$PROJECT_ID/procuroid-backend:$COMMIT_SHA'
       - '--region'
       - 'us-central1'  # Change this to your preferred region
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'  # Remove this if you want authentication
+      - '--allow-unauthenticated'  # Allows public access
+      # IMPORTANT: Set these environment variables or use Secret Manager
+      # Replace these with your actual Supabase credentials
+      # Or better: Use --set-secrets with Secret Manager (see DEPLOYMENT.md)
       - '--set-env-vars'
       - 'PYTHON_ENV=production'
-      # Add more environment variables as needed:
-      # - '--set-env-vars'
-      # - 'SUPABASE_URL=your-url,SUPABASE_KEY=your-key'
+      # Uncomment and add your Supabase credentials:
+      # - '--update-env-vars'
+      # - 'SUPABASE_URL=https://your-project.supabase.co,SUPABASE_KEY=your-key,SUPABASE_SERVICE_KEY=your-service-key'
+
+  # Explicitly set IAM policy to allow public access (backup method)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'add-iam-policy-binding'
+      - 'procuroid'
+      - '--region=us-central1'
+      - '--member=allUsers'
+      - '--role=roles/run.invoker'
 
 # Store images in Google Container Registry
 images:

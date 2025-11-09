@@ -21,6 +21,7 @@ from services.database import (
     get_orders,
     get_quotations,
     update_quotation,
+    supabase,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import (
@@ -833,189 +834,40 @@ def get_quotation_comparison(job_id: str):
 
 @api_bp.route("/profile", methods=["GET"])
 @require_auth
-def get_job_quotations(job_id: str):
-    """
-    Get all quotations for a job with AI analysis.
-    Returns detailed comparison data for frontend display.
-    """
-    
+def get_profile_endpoint():
+    """Get user profile information"""
     try:
-        # Fetch all quotations for this job
-        quotations = supabase.table("quotations")\
-            .select("*, suppliers(*)")\
-            .eq("job_id", job_id)\
-            .order("comparison_metrics->overall_recommendation_score", desc=True)\
-            .execute()
+        user_id = request.user["id"]
+        result = get_profile(user_id)
         
-        # Fetch conversation analyses
-        analyses = supabase.table("conversation_analyses")\
-            .select("*")\
-            .execute()
-        
-        # Combine data
-        enriched_quotations = []
-        for quote in quotations.data:
-            # Find matching analysis
-            analysis = next(
-                (a for a in analyses.data if a["supplier_id"] == quote["supplier_id"]),
-                None
-            )
-            
-            enriched_quotations.append({
-                "id": quote["id"],
-                "supplier": {
-                    "id": quote["supplier_id"],
-                    "name": quote["supplier_name"],
-                    "contact": quote.get("suppliers", {})
-                },
-                "quotation": quote["quotation_data"],
-                "sentiment": quote.get("sentiment_data", {}),
-                "metrics": quote.get("comparison_metrics", {}),
-                "key_points": quote.get("key_points", []),
-                "confidence_score": quote.get("confidence_score", 0),
-                "full_analysis": analysis.get("analysis_data") if analysis else None,
-                "status": quote["status"],
-                "created_at": quote["created_at"]
-            })
-        
-        # Calculate comparison summary
-        summary = _calculate_quotation_summary(enriched_quotations)
-        
-        return jsonify({
-            "success": True,
-            "job_id": job_id,
-            "quotations": enriched_quotations,
-            "summary": summary,
-            "count": len(enriched_quotations)
-        }), 200
-        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        print(f"Exception in get_profile_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-def _calculate_quotation_summary(quotations: List[Dict]) -> Dict:
-    """Calculate summary statistics for quotations"""
-    
-    if not quotations:
-        return {}
-    
-    prices = [q["quotation"]["pricing"]["total_price"] 
-              for q in quotations 
-              if q["quotation"].get("pricing", {}).get("total_price")]
-    
-    delivery_days = [q["quotation"]["delivery"]["lead_time_days"]
-                     for q in quotations
-                     if q["quotation"].get("delivery", {}).get("lead_time_days")]
-    
-    return {
-        "total_quotations": len(quotations),
-        "price_range": {
-            "lowest": min(prices) if prices else None,
-            "highest": max(prices) if prices else None,
-            "average": sum(prices) / len(prices) if prices else None
-        },
-        "delivery_range": {
-            "fastest": min(delivery_days) if delivery_days else None,
-            "slowest": max(delivery_days) if delivery_days else None,
-            "average": sum(delivery_days) / len(delivery_days) if delivery_days else None
-        },
-        "top_recommended": quotations[0] if quotations else None
-    }
-
-
-@api_bp.route("/procurement-jobs/<job_id>/meetings", methods=["GET"])
+@api_bp.route("/profile", methods=["PATCH"])
 @require_auth
-def get_job_meetings(job_id: str):
-    """Get all meeting requests for a job"""
-    
+def update_profile_endpoint():
+    """Update user profile information"""
     try:
-        meetings = supabase.table("meeting_requests")\
-            .select("*, suppliers(*)")\
-            .eq("job_id", job_id)\
-            .order("urgency", desc=True)\
-            .execute()
+        data = request.get_json()
         
-        return jsonify({
-            "success": True,
-            "meetings": meetings.data,
-            "count": len(meetings.data)
-        }), 200
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
         
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-
-@api_bp.route("/procurement-jobs/<job_id>/comparison", methods=["GET"])
-@require_auth
-def get_quotation_comparison(job_id: str):
-    """
-    Get side-by-side comparison of all quotations.
-    Optimized for frontend comparison view.
-    """
-    
-    try:
-        quotations = supabase.table("quotations")\
-            .select("*")\
-            .eq("job_id", job_id)\
-            .execute()
+        user_id = request.user["id"]
+        result = update_profile(user_id, data)
         
-        # Build comparison matrix
-        comparison = {
-            "suppliers": [],
-            "metrics": {
-                "price": [],
-                "delivery": [],
-                "value_score": [],
-                "reliability_score": [],
-                "overall_score": []
-            },
-            "detailed_comparison": []
-        }
-        
-        for quote in quotations.data:
-            supplier_name = quote["supplier_name"]
-            comparison["suppliers"].append(supplier_name)
-            
-            # Extract metrics
-            pricing = quote["quotation_data"].get("pricing", {})
-            delivery = quote["quotation_data"].get("delivery", {})
-            metrics = quote.get("comparison_metrics", {})
-            
-            comparison["metrics"]["price"].append(pricing.get("total_price"))
-            comparison["metrics"]["delivery"].append(delivery.get("lead_time_days"))
-            comparison["metrics"]["value_score"].append(metrics.get("value_score"))
-            comparison["metrics"]["reliability_score"].append(metrics.get("reliability_score"))
-            comparison["metrics"]["overall_score"].append(metrics.get("overall_recommendation_score"))
-            
-            # Detailed comparison
-            comparison["detailed_comparison"].append({
-                "supplier": supplier_name,
-                "price": pricing.get("total_price"),
-                "price_per_unit": pricing.get("price_per_unit"),
-                "delivery_days": delivery.get("lead_time_days"),
-                "payment_terms": quote["quotation_data"].get("terms", {}).get("payment_terms"),
-                "pros": metrics.get("pros", []),
-                "cons": metrics.get("cons", []),
-                "scores": {
-                    "value": metrics.get("value_score"),
-                    "reliability": metrics.get("reliability_score"),
-                    "responsiveness": metrics.get("responsiveness_score"),
-                    "flexibility": metrics.get("flexibility_score"),
-                    "overall": metrics.get("overall_recommendation_score")
-                }
-            })
-        
-        return jsonify({
-            "success": True,
-            "comparison": comparison
-        }), 200
-        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
     except Exception as e:
         print(f"Exception in update_profile_endpoint: {e}")
         import traceback
