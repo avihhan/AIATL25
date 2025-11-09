@@ -45,6 +45,13 @@ export default function AccountSettings() {
     const [timezone, setTimezone] = useState('UTC');
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [showPasswordFields, setShowPasswordFields] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     // ---------- LOAD USER DATA ----------
     useEffect(() => {
@@ -101,7 +108,20 @@ export default function AccountSettings() {
         setMessage(null);
 
         try {
-            // Update auth user (email + metadata). If email changed, Supabase may send confirmation.
+            // Validate password change if password fields are shown and filled
+            if (showPasswordFields) {
+                if (newPassword && newPassword.length < 6) {
+                    throw new Error('New password must be at least 6 characters long.');
+                }
+                if (newPassword && newPassword !== confirmPassword) {
+                    throw new Error('New password and confirm password do not match.');
+                }
+                if (newPassword && !currentPassword) {
+                    throw new Error('Please enter your current password to change it.');
+                }
+            }
+
+            // Update auth user (email + metadata + password). If email changed, Supabase may send confirmation.
             const authPayload: any = {
                 data: {
                     display_name: displayName || null,
@@ -111,6 +131,27 @@ export default function AccountSettings() {
             };
             // include email in auth update to persist any email edits
             if (email) authPayload.email = email;
+
+            // include password if user wants to change it
+            if (showPasswordFields && newPassword && currentPassword) {
+                // Verify current password by attempting sign in (this will refresh the session)
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user || !user.email) throw new Error('Unable to verify user identity.');
+
+                // Verify current password by attempting sign in
+                const { error: verifyErr } = await supabase.auth.signInWithPassword({
+                    email: user.email,
+                    password: currentPassword,
+                });
+
+                if (verifyErr) {
+                    throw new Error('Current password is incorrect.');
+                }
+
+                // If verification successful, update password
+                // Note: We update password separately after auth update to ensure proper session handling
+                authPayload.password = newPassword;
+            }
 
             const { error: authErr } = await supabase.auth.updateUser(authPayload);
             if (authErr) throw authErr;
@@ -158,6 +199,12 @@ export default function AccountSettings() {
                 console.warn('sync_profile RPC error (non-fatal):', syncErr);
             }
 
+            // Refresh user data to get updated email (if email was changed, Supabase may require confirmation)
+            const { data: { user: refreshedUser } } = await supabase.auth.getUser();
+            if (refreshedUser && refreshedUser.email) {
+                setEmail(refreshedUser.email);
+            }
+
             // Re-fetch to sync local state
             const { data: refreshedProfile, error: refreshErr } = await supabase
                 .from('profiles')
@@ -175,6 +222,14 @@ export default function AccountSettings() {
                 setTimezone((refreshedProfile.timezone as any) || 'UTC');
                 setNotifications((refreshedProfile.notifications as any) || { email: true, marketing: false, system: true });
                 setTwoFactorEnabled(!!refreshedProfile.two_factor_enabled);
+            }
+
+            // Clear password fields if password was changed successfully
+            if (showPasswordFields && newPassword) {
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setShowPasswordFields(false);
             }
 
             setMessage('Profile and settings saved successfully.');
@@ -243,10 +298,6 @@ export default function AccountSettings() {
                 <p className="text-sm text-gray-600 mb-5 z-10">{email}</p>
 
                 <div className="flex flex-wrap justify-center gap-4 z-10">
-                    <button onClick={saveProfile} disabled={saving} className={btnPrimary}>
-                        <Save className="h-4 w-4" />
-                        {saving ? 'Saving...' : 'Save Changes'}
-                    </button>
                     <button
                         onClick={async () => {
                             await supabase.auth.signOut();
@@ -277,12 +328,23 @@ export default function AccountSettings() {
                             <input className={inputClass} value={lastName} onChange={(e) => setLastName(e.target.value)} />
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-1 gap-0">
-                        <label className={labelClass}>Change Email</label>
-                        <div className="flex gap-3 mt-1">
-                            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+                    <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mb-5">
+                        <div>
+                            <label className={labelClass}>Display Name</label>
+                            <input className={inputClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className={labelClass}>Change Email</label>
+                            <div className="flex gap-0 mt-1">
+                                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+                            </div>
                         </div>
                     </div>
+
+                    <button onClick={saveProfile} disabled={saving} className={btnPrimary}>
+                        <Save className="h-4 w-4" />
+                        {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
                 </section>
 
                 {/* SECURITY */}
@@ -290,7 +352,7 @@ export default function AccountSettings() {
                     <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
                         <Lock className="h-5 w-5 text-primary-600" /> Security
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className={labelClass}>Two-Factor Authentication</label>
                             <div className="flex items-center justify-between">
@@ -298,22 +360,110 @@ export default function AccountSettings() {
                                 <Toggle checked={twoFactorEnabled} onChange={setTwoFactorEnabled} />
                             </div>
                         </div>
-                        <div>
-                            <label className={labelClass}>Password</label>
-                            <div className="relative">
-                                <input type={showPassword ? 'text' : 'password'} readOnly value="••••••••" className={inputClass} />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                >
-                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
+                        {!showPasswordFields && (
+                            <div>
+                                <label className={labelClass}>Password</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type="password"
+                                            readOnly
+                                            value="••••••••"
+                                            className={inputClass}
+                                            disabled
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPasswordFields(true)}
+                                        className={btnSecondary}
+                                    >
+                                        Change Password
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {showPasswordFields && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                            <label className={labelClass}>Change Password</label>
+                            <div className="space-y-3 mt-2">
+                                <div className="relative">
+                                    <label className={labelClass}>Current Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showCurrentPassword ? 'text' : 'password'}
+                                            value={currentPassword}
+                                            onChange={(e) => setCurrentPassword(e.target.value)}
+                                            placeholder="Enter current password"
+                                            className={inputClass + ' pr-10'}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 z-10"
+                                        >
+                                            {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="relative">
+                                    <label className={labelClass}>New Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showNewPassword ? 'text' : 'password'}
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="Enter new password (min 6 characters)"
+                                            className={inputClass + ' pr-10'}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowNewPassword(!showNewPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 z-10"
+                                        >
+                                            {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="relative">
+                                    <label className={labelClass}>Confirm New Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="Confirm new password"
+                                            className={inputClass + ' pr-10'}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 z-10"
+                                        >
+                                            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowPasswordFields(false);
+                                            setCurrentPassword('');
+                                            setNewPassword('');
+                                            setConfirmPassword('');
+                                        }}
+                                        className={btnSecondary}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </section>
-                
+
                 {/* DANGER ZONE */}
                 <section className={cardClass + ' border-red-200 bg-red-50'}>
                     <div className="flex items-center justify-between mb-3">

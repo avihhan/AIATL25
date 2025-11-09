@@ -19,11 +19,6 @@ window.addEventListener('resize', () => {
 });
 
 // only spawn particles while moving
-window.addEventListener('mousemove', (e) => {
-  for (let i = 0; i < 2; i++) {
-    particles.push(new Particle(e.clientX, e.clientY));
-  }
-});
 
 class Particle {
   x: number;

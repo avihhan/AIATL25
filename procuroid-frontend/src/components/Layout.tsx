@@ -94,7 +94,7 @@ const Layout = ({ children }: LayoutProps) => {
   }, []);
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Orders', href: '/orders', icon: ShoppingCart },
     { name: 'Suppliers', href: '/suppliers', icon: Users },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
@@ -107,7 +107,7 @@ const Layout = ({ children }: LayoutProps) => {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center justify-center border-b border-gray-200">
-            <h1 className="text-xl font-bold text-primary-600">Procuroid</h1>
+            <Link to="/" className="text-2xl font-bold text-primary-600">Procuroid</Link>
           </div>
 
           {/* Navigation */}

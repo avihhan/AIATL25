@@ -37,18 +37,81 @@ export default function SignIn() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-      <div className="w-full max-w-md card">
-        <h1 className="text-xl font-semibold text-gray-900 mb-4">Sign in</h1>
-        {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div><label className="block text-sm font-medium mb-1">Email</label>
-            <input className="input-field" type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></div>
-          <div><label className="block text-sm font-medium mb-1">Password</label>
-            <input className="input-field" type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
-          <button className="btn-primary w-full" disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</button>
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 p-6">
+
+      <nav className="absolute top-0 left-0 w-full z-10 flex justify-between items-center px-8 py-4 bg-black/40 rounded-b-lg text-white shadow-2xl">
+        <Link to="/" className="text-2xl font-bold text-primary-600">Procuroid</Link>
+
+        <div className="space-x-4">
+          <button
+            onClick={() => navigate('/signin')}
+            className="px-4 py-2 bg-white/20 backdrop-blur-md rounded-lg hover:bg-white/30 transition"
+          >
+            Log In
+          </button>
+          <button
+            onClick={() => navigate('/signup')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+          >
+            Sign Up
+          </button>
+        </div>
+      </nav>
+      {/* Background Image */}
+      <img
+        src="/src/assets/background.png"
+        alt="Background"
+        className="absolute inset-0 w-full h-full object-cover z-0 filter grayscale-[50%]"
+      />
+
+      {/* Optional overlay to control opacity */}
+      <div className="absolute inset-0 bg-black/20 z-0"></div>
+
+      {/* Sign In Card */}
+      <div className="relative z-10 w-full max-w-md bg-white/70 rounded-2xl shadow-xl p-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">Sign in</h1>
+
+        {err && <div className="mb-4 text-sm text-red-600">{err}</div>}
+
+        <form onSubmit={onSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium mb-2">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <div className="relative">
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="********"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition"
+                required
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold shadow-md hover:scale-105 transition-transform"
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
         </form>
-        <p className="text-sm text-gray-600 mt-4">No account? <Link to="/signup" className="text-primary-600">Sign up</Link></p>
+
+        <p className="text-sm text-black-600 mt-6 text-center">
+          No account? <Link to="/signup" className="text-primary-600 font-medium hover:underline">Sign up</Link>
+        </p>
       </div>
     </div>
   );
