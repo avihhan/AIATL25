@@ -82,7 +82,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   // Listen to auth state changes (when user metadata is updated)
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === 'USER_UPDATED' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         fetchUserData();
       }

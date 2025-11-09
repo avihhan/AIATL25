@@ -5,12 +5,7 @@ import { updateProfile as updateProfileAPI } from '../api/apiCalls';
 import {
     User,
     Lock,
-    Bell,
-    CreditCard,
     Trash2,
-    Globe,
-    Sun,
-    Moon,
     Save,
     LogOut,
     Loader2,
