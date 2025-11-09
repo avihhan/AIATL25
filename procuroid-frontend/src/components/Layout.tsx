@@ -21,6 +21,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const [isPlaceOrderOpen, setIsPlaceOrderOpen] = useState(false);
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -155,6 +156,13 @@ const Layout = ({ children }: LayoutProps) => {
                 <Plus className="h-4 w-4" />
                 <span>Place New Order</span>
               </button>
+              <button
+                onClick={() => setIsDemoOpen(true)}
+                className="btn-primary flex items-center space-x-2"
+              >
+                {/* <Plus className="h-4 w-4" /> */}
+                <span>Demo</span>
+              </button>
             </div>
 
             <div className="flex items-center space-x-4">
@@ -219,7 +227,10 @@ const Layout = ({ children }: LayoutProps) => {
 
       {/* Modals */}
       {isPlaceOrderOpen && (
-        <PlaceOrderModal onClose={() => setIsPlaceOrderOpen(false)} />
+        <PlaceOrderModal onClose={() => setIsPlaceOrderOpen(false)} isDemo={false} />
+      )}
+      {isDemoOpen && (
+        <PlaceOrderModal onClose={() => setIsDemoOpen(false)} isDemo={true} />
       )}
     </div>
   );

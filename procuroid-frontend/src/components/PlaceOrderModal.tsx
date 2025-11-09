@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check, ArrowRight } from 'lucide-react';
+import { X, Check, ArrowRight, Phone } from 'lucide-react';
 import { Slider } from '@heroui/react';
-import { createOrder } from '../api/apiCalls';
+import { createOrder, initiateElevenLabsCall } from '../api/apiCalls';
 import { useAuth } from '../context/AuthProvider';
 
 interface PlaceOrderModalProps {
   onClose: () => void;
+  isDemo?: boolean;
 }
 
 type SupplierType = 'manufacturer' | 'distributor' | 'service_provider';
@@ -37,7 +38,73 @@ interface OrderFormData {
   incoterms: string;
 }
 
-const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
+// Supplier data with phone numbers
+const DEMO_SUPPLIERS = [
+  { 
+    name: 'TechSource Manufacturing', 
+    phone: '+14709299380',
+  },
+  { 
+    name: 'Global Supplies Inc', 
+    phone: '+14708157502',
+  },
+  { 
+    name: 'PrimeVendor Solutions', 
+    phone: '+17032970071',
+  },
+  { 
+    name: 'Apex Distribution Co', 
+    phone: '+14254328908',
+  },
+];
+
+// Demo function - initiates calls to all suppliers
+const call_function = async (formData: OrderFormData) => {
+  console.log('=== DEMO FORM OUTPUT ===');
+  console.log(JSON.stringify(formData, null, 2));
+  console.log('========================');
+  
+  console.log('Initiating calls to all suppliers...');
+  
+  // Call all suppliers
+  const callPromises = DEMO_SUPPLIERS.map(async (supplier) => {
+    console.log(`Calling ${supplier.name} at ${supplier.phone}...`);
+    
+    const result = await initiateElevenLabsCall(
+      supplier.phone,
+      {
+        productName: formData.productName,
+        productDescription: formData.productDescription,
+        quantity: formData.quantity,
+        unitOfMeasurement: formData.unitOfMeasurement,
+        lowerLimit: formData.lowerLimit,
+        upperLimit: formData.upperLimit,
+        currency: formData.currency,
+        requiredDeliveryDate: formData.requiredDeliveryDate,
+        location: formData.location,
+      },
+      supplier.name
+    );
+    
+    if (result.success) {
+      console.log(`✅ Call to ${supplier.name} initiated successfully`);
+    } else {
+      console.error(`❌ Failed to call ${supplier.name}:`, result.error);
+    }
+    
+    return { supplier: supplier.name, ...result };
+  });
+  
+  // Wait for all calls to complete
+  const results = await Promise.all(callPromises);
+  
+  console.log('=== ALL CALLS COMPLETED ===');
+  console.log(results);
+  
+  return results;
+};
+
+const PlaceOrderModal = ({ onClose, isDemo = false }: PlaceOrderModalProps) => {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<OrderFormData>({
@@ -230,6 +297,25 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // If in demo mode, initiate calls to all suppliers
+    if (isDemo) {
+      setIsSubmitting(true);
+      setSubmitError(null);
+      
+      try {
+        await call_function(formData);
+        // Show success message or keep modal open to show results
+        alert('Demo calls initiated successfully! Check the console for details.');
+        onClose();
+      } catch (error: any) {
+        console.error('Error initiating demo calls:', error);
+        setSubmitError(error.message || 'Failed to initiate calls');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (!user?.id) {
       console.error('Cannot place order: no authenticated user');
       setSubmitError('You must be logged in to place an order');
@@ -268,7 +354,9 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Place New Order</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {isDemo ? 'Demo Order' : 'Place New Order'}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -585,6 +673,76 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
                 </div>
               </div>
 
+              {/* Suppliers Section */}
+              <div className="border rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900">Available Suppliers</h3>
+                  {isDemo && (
+                    <span className="flex items-center text-sm text-primary-600">
+                      <Phone className="h-4 w-4 mr-1" />
+                      Will call all on submit
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { 
+                      name: 'TechSource Manufacturing', 
+                      contact: 'Sarah Johnson',
+                      phone: '+14709299380',
+                      email: 'sarah.j@techsource.com',
+                      location: 'Atlanta, GA',
+                      specialty: 'Electronics & Components'
+                    },
+                    { 
+                      name: 'Global Supplies Inc', 
+                      contact: 'Michael Chen',
+                      phone: '+14708157502',
+                      email: 'm.chen@globalsupplies.com',
+                      location: 'Charlotte, NC',
+                      specialty: 'Industrial Materials'
+                    },
+                    { 
+                      name: 'PrimeVendor Solutions', 
+                      contact: 'Emily Rodriguez',
+                      phone: '+17032970071',
+                      email: 'emily.r@primevendor.com',
+                      location: 'Arlington, VA',
+                      specialty: 'Office Supplies & Equipment'
+                    },
+                    { 
+                      name: 'Apex Distribution Co', 
+                      contact: 'David Thompson',
+                      phone: '+14254328908',
+                      email: 'd.thompson@apexdist.com',
+                      location: 'Seattle, WA',
+                      specialty: 'Raw Materials & Chemicals'
+                    },
+                  ].map((supplier, index) => (
+                    <div 
+                      key={index} 
+                      className="bg-white rounded-lg p-3 border border-gray-200 hover:border-primary-300 transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 text-sm">{supplier.name}</h4>
+                          <p className="text-xs text-gray-500">{supplier.specialty}</p>
+                        </div>
+                        <div className="h-10 w-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0 ml-2">
+                          <span className="text-primary-600 font-bold text-sm">{String.fromCharCode(65 + index)}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-xs text-gray-600">
+                        <p><span className="font-medium">Contact:</span> {supplier.contact}</p>
+                        <p><span className="font-medium">Phone:</span> {supplier.phone}</p>
+                        <p><span className="font-medium">Email:</span> {supplier.email}</p>
+                        <p><span className="font-medium">Location:</span> {supplier.location}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {submitError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
                   {submitError}
@@ -597,10 +755,16 @@ const PlaceOrderModal = ({ onClose }: PlaceOrderModalProps) => {
                 </button>
                 <button 
                   type="submit" 
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Place Order'}
+                  {isDemo && isSubmitting && <Phone className="h-4 w-4 animate-pulse" />}
+                  <span>
+                    {isSubmitting 
+                      ? (isDemo ? 'Initiating Calls...' : 'Submitting...') 
+                      : (isDemo ? 'Submit Demo & Call Suppliers' : 'Place Order')
+                    }
+                  </span>
                 </button>
               </div>
             </form>
