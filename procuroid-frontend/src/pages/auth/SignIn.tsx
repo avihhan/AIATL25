@@ -3,10 +3,14 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { signIn } from '../../api/apiCalls';
+import SplashScreen from '../../components/SplashScreen'; // 🔹 new import
 
 export default function SignIn() {
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
-  const [err, setErr] = useState<string | null>(null); const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showSplash, setShowSplash] = useState(false); // 🔹 new
   const navigate = useNavigate();
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -35,6 +39,10 @@ export default function SignIn() {
       setLoading(false);
     }
   };
+  
+  if (showSplash) {
+    return <SplashScreen onComplete={() => navigate('/dashboard')} />;
+  }
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-gray-50 p-6">
@@ -60,10 +68,11 @@ export default function SignIn() {
       </nav>
       {/* Background Image */}
       <img
-        src="/src/assets/background.png"
+        src="/assets/background.png"
         alt="Background"
         className="absolute inset-0 w-full h-full object-cover z-0 filter grayscale-[50%]"
       />
+
 
       {/* Optional overlay to control opacity */}
       <div className="absolute inset-0 bg-black/20 z-0"></div>

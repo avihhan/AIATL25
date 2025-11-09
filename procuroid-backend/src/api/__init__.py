@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from functools import wraps
 import json
 from datetime import datetime
+from typing import List, Dict
 from services.database import (
     verify_user_token,
     sign_up_user,
@@ -22,7 +23,11 @@ from services.database import (
     update_quotation,
 )
 from services.llm import extract_call_conclusion
-from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
+from services.elevenlabs import (
+    initiate_elevenlabs_call,
+    initiate_elevenlabs_call_via_api,
+    ElevenLabsCallError
+)
 
 # Create a blueprint for API routes
 api_bp = Blueprint('api', __name__)
@@ -315,7 +320,11 @@ def initiate_elevenlabs_call_endpoint():
 
     if not to_number:
         return jsonify({"error": "'to' (destination phone number) is required."}), 400
+    
+    if not agent_id:
+        return jsonify({"error": "'agent_id' is required."}), 400
 
+    # Build metadata payload
     metadata_payload = dict(metadata or {})
     user_id = request.user.get("id") if isinstance(request.user, dict) else None
     if user_id is not None:
@@ -327,8 +336,10 @@ def initiate_elevenlabs_call_endpoint():
     metadata_payload = {key: value for key, value in metadata_payload.items() if value is not None}
 
     try:
-        call_response = initiate_elevenlabs_call(
-            to_number,
+        # Use the simpler ElevenLabs API approach (recommended)
+        # This calls ElevenLabs API which handles Twilio internally
+        call_response = initiate_elevenlabs_call_via_api(
+            to=to_number,
             agent_id=agent_id,
             metadata=metadata_payload or None,
         )
@@ -377,6 +388,53 @@ def call_quotation_agent_endpoint():
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/twiml/elevenlabs", methods=["POST", "GET"])
+def generate_elevenlabs_twiml():
+    """
+    Generate TwiML to connect Twilio call to ElevenLabs.
+    This endpoint can be used as the webhook URL when creating Twilio calls.
+    
+    Query parameters:
+    - agent_id: ElevenLabs agent ID
+    - userId: User ID to pass to ElevenLabs
+    - jobId: Optional job ID
+    """
+    from flask import Response
+    from urllib.parse import urlencode
+    
+    # Get parameters from query string (Twilio will pass these along)
+    agent_id = request.args.get("agent_id")
+    user_id = request.args.get("userId")
+    job_id = request.args.get("jobId")
+    
+    if not agent_id:
+        return Response(
+            '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Agent ID is required</Say><Hangup/></Response>',
+            mimetype='text/xml'
+        ), 400
+    
+    # Build ElevenLabs webhook URL with parameters
+    elevenlabs_url = "https://api.us.elevenlabs.io/twilio/inbound_call"
+    params = {}
+    if agent_id:
+        params["agent_id"] = agent_id
+    if user_id:
+        params["userId"] = user_id
+    if job_id:
+        params["jobId"] = job_id
+    
+    if params:
+        elevenlabs_url = f"{elevenlabs_url}?{urlencode(params)}"
+    
+    # Generate TwiML that redirects to ElevenLabs
+    twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Redirect method="POST">{elevenlabs_url}</Redirect>
+</Response>'''
+    
+    return Response(twiml, mimetype='text/xml')
 
 
 @api_bp.route("/quotation-agent/webhook", methods=["POST"])
@@ -582,6 +640,198 @@ def list_quote_requests():
 
 
 @api_bp.route("/procurement-jobs/<job_id>/quotations", methods=["GET"])
+@require_auth
+def get_job_quotations(job_id: str):
+    """
+    Get all quotations for a job with AI analysis.
+    Returns detailed comparison data for frontend display.
+    """
+    
+    try:
+        # Fetch all quotations for this job
+        quotations = supabase.table("quotations")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("comparison_metrics->overall_recommendation_score", desc=True)\
+            .execute()
+        
+        # Fetch conversation analyses
+        analyses = supabase.table("conversation_analyses")\
+            .select("*")\
+            .execute()
+        
+        # Combine data
+        enriched_quotations = []
+        for quote in quotations.data:
+            # Find matching analysis
+            analysis = next(
+                (a for a in analyses.data if a["supplier_id"] == quote["supplier_id"]),
+                None
+            )
+            
+            enriched_quotations.append({
+                "id": quote["id"],
+                "supplier": {
+                    "id": quote["supplier_id"],
+                    "name": quote["supplier_name"],
+                    "contact": quote.get("suppliers", {})
+                },
+                "quotation": quote["quotation_data"],
+                "sentiment": quote.get("sentiment_data", {}),
+                "metrics": quote.get("comparison_metrics", {}),
+                "key_points": quote.get("key_points", []),
+                "confidence_score": quote.get("confidence_score", 0),
+                "full_analysis": analysis.get("analysis_data") if analysis else None,
+                "status": quote["status"],
+                "created_at": quote["created_at"]
+            })
+        
+        # Calculate comparison summary
+        summary = _calculate_quotation_summary(enriched_quotations)
+        
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "quotations": enriched_quotations,
+            "summary": summary,
+            "count": len(enriched_quotations)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+def _calculate_quotation_summary(quotations: List[Dict]) -> Dict:
+    """Calculate summary statistics for quotations"""
+    
+    if not quotations:
+        return {}
+    
+    prices = [q["quotation"]["pricing"]["total_price"] 
+              for q in quotations 
+              if q["quotation"].get("pricing", {}).get("total_price")]
+    
+    delivery_days = [q["quotation"]["delivery"]["lead_time_days"]
+                     for q in quotations
+                     if q["quotation"].get("delivery", {}).get("lead_time_days")]
+    
+    return {
+        "total_quotations": len(quotations),
+        "price_range": {
+            "lowest": min(prices) if prices else None,
+            "highest": max(prices) if prices else None,
+            "average": sum(prices) / len(prices) if prices else None
+        },
+        "delivery_range": {
+            "fastest": min(delivery_days) if delivery_days else None,
+            "slowest": max(delivery_days) if delivery_days else None,
+            "average": sum(delivery_days) / len(delivery_days) if delivery_days else None
+        },
+        "top_recommended": quotations[0] if quotations else None
+    }
+
+
+@api_bp.route("/procurement-jobs/<job_id>/meetings", methods=["GET"])
+@require_auth
+def get_job_meetings(job_id: str):
+    """Get all meeting requests for a job"""
+    
+    try:
+        meetings = supabase.table("meeting_requests")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("urgency", desc=True)\
+            .execute()
+        
+        return jsonify({
+            "success": True,
+            "meetings": meetings.data,
+            "count": len(meetings.data)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@api_bp.route("/procurement-jobs/<job_id>/comparison", methods=["GET"])
+@require_auth
+def get_quotation_comparison(job_id: str):
+    """
+    Get side-by-side comparison of all quotations.
+    Optimized for frontend comparison view.
+    """
+    
+    try:
+        quotations = supabase.table("quotations")\
+            .select("*")\
+            .eq("job_id", job_id)\
+            .execute()
+        
+        # Build comparison matrix
+        comparison = {
+            "suppliers": [],
+            "metrics": {
+                "price": [],
+                "delivery": [],
+                "value_score": [],
+                "reliability_score": [],
+                "overall_score": []
+            },
+            "detailed_comparison": []
+        }
+        
+        for quote in quotations.data:
+            supplier_name = quote["supplier_name"]
+            comparison["suppliers"].append(supplier_name)
+            
+            # Extract metrics
+            pricing = quote["quotation_data"].get("pricing", {})
+            delivery = quote["quotation_data"].get("delivery", {})
+            metrics = quote.get("comparison_metrics", {})
+            
+            comparison["metrics"]["price"].append(pricing.get("total_price"))
+            comparison["metrics"]["delivery"].append(delivery.get("lead_time_days"))
+            comparison["metrics"]["value_score"].append(metrics.get("value_score"))
+            comparison["metrics"]["reliability_score"].append(metrics.get("reliability_score"))
+            comparison["metrics"]["overall_score"].append(metrics.get("overall_recommendation_score"))
+            
+            # Detailed comparison
+            comparison["detailed_comparison"].append({
+                "supplier": supplier_name,
+                "price": pricing.get("total_price"),
+                "price_per_unit": pricing.get("price_per_unit"),
+                "delivery_days": delivery.get("lead_time_days"),
+                "payment_terms": quote["quotation_data"].get("terms", {}).get("payment_terms"),
+                "pros": metrics.get("pros", []),
+                "cons": metrics.get("cons", []),
+                "scores": {
+                    "value": metrics.get("value_score"),
+                    "reliability": metrics.get("reliability_score"),
+                    "responsiveness": metrics.get("responsiveness_score"),
+                    "flexibility": metrics.get("flexibility_score"),
+                    "overall": metrics.get("overall_recommendation_score")
+                }
+            })
+        
+        return jsonify({
+            "success": True,
+            "comparison": comparison
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@api_bp.route("/profile", methods=["GET"])
 @require_auth
 def get_job_quotations(job_id: str):
     """
