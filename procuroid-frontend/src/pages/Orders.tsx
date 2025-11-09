@@ -167,13 +167,15 @@ const Orders = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-        <p className="text-gray-600">Manage all your procurement requests and orders</p>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2">
+          Orders
+        </h1>
+        <p className="text-gray-600 text-lg">Manage all your procurement requests and orders</p>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="card bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -182,7 +184,7 @@ const Orders = () => {
               placeholder="Search by product name, description, or order ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-200 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-md"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -193,7 +195,7 @@ const Orders = () => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition bg-white"
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-200 bg-white/90 backdrop-blur-sm shadow-sm hover:shadow-md"
             >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
@@ -208,11 +210,16 @@ const Orders = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+      <div className="card overflow-hidden bg-gradient-to-br from-white via-purple-50/20 to-pink-50/20">
+        <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-gray-50 to-blue-50/30">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
-            <span className="text-sm text-gray-500">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-primary-500 to-indigo-500 rounded-lg shadow-md">
+                <Package className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Orders</h2>
+            </div>
+            <span className="text-sm font-semibold text-gray-600 bg-white/80 px-3 py-1.5 rounded-lg shadow-sm">
               {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
             </span>
           </div>
@@ -229,7 +236,7 @@ const Orders = () => {
             <p className="text-red-600 mb-2 font-medium">{error}</p>
             <button
               onClick={fetchOrders}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+              className="mt-4 px-4 py-2 bg-gradient-to-r from-primary-600 to-indigo-600 text-white rounded-lg hover:from-primary-700 hover:to-indigo-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
             >
               Try again
             </button>
@@ -253,7 +260,7 @@ const Orders = () => {
             {filteredOrders.map((order) => {
               const isExpanded = selectedOrder === order.id;
               return (
-                <div key={order.id} className="transition-colors hover:bg-gray-50">
+                <div key={order.id} className="transition-all duration-200 hover:bg-white/60 border-b border-gray-100/50 last:border-b-0">
                   {/* Main Order Row */}
                   <div
                     className="px-6 py-4 cursor-pointer"
@@ -314,12 +321,12 @@ const Orders = () => {
 
                   {/* Expanded Details */}
                   {isExpanded && (
-                    <div className="px-6 py-6 bg-gray-50 border-t border-gray-200">
+                    <div className="px-6 py-6 bg-gradient-to-br from-gray-50/50 to-blue-50/30 border-t border-gray-200/50">
                       <div className="max-w-6xl mx-auto space-y-6">
                         {/* Detailed Information Grid */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           {/* Product Information */}
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                          <div className="card bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/20">
                             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                               <FileText className="h-5 w-5 text-gray-600" />
                               <h3 className="text-base font-semibold text-gray-900">Product Information</h3>
@@ -357,7 +364,7 @@ const Orders = () => {
                           </div>
 
                           {/* Order & Financial Details */}
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                          <div className="card bg-gradient-to-br from-white via-green-50/20 to-emerald-50/20">
                             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                               <DollarSign className="h-5 w-5 text-gray-600" />
                               <h3 className="text-base font-semibold text-gray-900">Order & Financial Details</h3>
@@ -380,9 +387,9 @@ const Orders = () => {
                                 </div>
                               )}
                               {order.total_price_estimate && (
-                                <div className="flex items-center justify-between py-2">
-                                  <span className="text-base font-semibold text-gray-900">Total Estimate</span>
-                                  <span className="text-lg font-bold text-primary-700">
+                                <div className="flex items-center justify-between py-2 bg-gradient-to-r from-primary-50 to-indigo-50 rounded-lg p-3 border border-primary-100">
+                                  <span className="text-base font-bold text-gray-900">Total Estimate</span>
+                                  <span className="text-lg font-bold bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">
                                     {order.currency || 'USD'} {order.total_price_estimate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </span>
                                 </div>
@@ -410,7 +417,7 @@ const Orders = () => {
                           </div>
 
                           {/* Delivery Information */}
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                          <div className="card bg-gradient-to-br from-white via-purple-50/20 to-pink-50/20">
                             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                               <Truck className="h-5 w-5 text-gray-600" />
                               <h3 className="text-base font-semibold text-gray-900">Delivery Information</h3>
@@ -456,7 +463,7 @@ const Orders = () => {
                           </div>
 
                           {/* Payment Information */}
-                          <div className="bg-white rounded-lg border border-gray-200 p-6">
+                          <div className="card bg-gradient-to-br from-white via-amber-50/20 to-orange-50/20">
                             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
                               <CreditCard className="h-5 w-5 text-gray-600" />
                               <h3 className="text-base font-semibold text-gray-900">Payment Information</h3>

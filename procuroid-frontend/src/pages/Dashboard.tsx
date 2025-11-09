@@ -373,26 +373,29 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2">
           Dashboard
         </h1>
-        <p className="text-gray-600">Overview of your procurement activities</p>
+        <p className="text-gray-600 text-lg">Overview of your procurement activities</p>
       </div>
 
       {/* Order Expenses Chart */}
-      <div className="card">
+      <div className="card bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Order Expenses</h2>
-          <div className="flex space-x-2">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Order Expenses</h2>
+            <p className="text-sm text-gray-500">Track your spending trends</p>
+          </div>
+          <div className="flex space-x-2 bg-gray-100/50 p-1 rounded-lg">
             {['daily', 'weekly', 'monthly'].map((period) => (
               <button
                 key={period}
                 onClick={() => setTimeframe(period)}
-                className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                   timeframe === period
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-white/80 hover:text-gray-900'
                 }`}
               >
                 {period.charAt(0).toUpperCase() + period.slice(1)}
@@ -400,7 +403,7 @@ const Dashboard = () => {
             ))}
           </div>
         </div>
-        <div className="h-80">
+        <div className="h-80 bg-white/50 rounded-lg p-4 border border-gray-200/50">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
@@ -408,20 +411,33 @@ const Dashboard = () => {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="name" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
                 <Tooltip 
                   formatter={(value) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Amount']}
                   labelStyle={{ color: '#374151' }}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="amount" 
-                  stroke="#0ea5e9" 
-                  strokeWidth={2}
-                  dot={{ fill: '#0ea5e9', strokeWidth: 2, r: 4 }}
+                  stroke="url(#colorGradient)" 
+                  strokeWidth={3}
+                  dot={{ fill: '#0ea5e9', strokeWidth: 2, r: 5 }}
+                  activeDot={{ r: 7 }}
                 />
+                <defs>
+                  <linearGradient id="colorGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#0ea5e9" />
+                    <stop offset="100%" stopColor="#6366f1" />
+                  </linearGradient>
+                </defs>
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -430,8 +446,16 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pending Approvals */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Pending Approvals</h2>
+        <div className="card bg-gradient-to-br from-white via-amber-50/20 to-orange-50/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg shadow-md">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Pending Approvals</h2>
+              <p className="text-sm text-gray-500">Quotes awaiting your review</p>
+            </div>
+          </div>
           {approvalsLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
@@ -473,38 +497,38 @@ const Dashboard = () => {
                   : '';
 
                 return (
-                  <div key={quotation.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
+                  <div key={quotation.id} className="border border-gray-200/50 rounded-xl p-5 bg-white/60 backdrop-blur-sm hover:border-primary-300 hover:shadow-lg transition-all duration-300 hover:bg-white/80">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-medium text-gray-900">{quotation.supplier_name || 'Unknown Supplier'}</h3>
+                          <h3 className="font-semibold text-gray-900 text-base">{quotation.supplier_name || 'Unknown Supplier'}</h3>
                           {createdDate && (
-                            <span className="text-xs text-gray-500">{createdDate}</span>
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md">{createdDate}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-mono text-gray-500">{quotationId}</span>
+                          <span className="text-xs font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{quotationId}</span>
                           {unitPrice > 0 && quantity && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-600">
                               @ {currency} {unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/{unitOfMeasurement}
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-1 font-medium">{product}</p>
+                        <p className="text-sm text-gray-700 mt-1 font-medium">{product}</p>
                         {quotation.reason && (
-                          <p className="text-xs text-gray-500 mt-2 italic line-clamp-2">{quotation.reason}</p>
+                          <p className="text-xs text-gray-500 mt-2 italic line-clamp-2 bg-gray-50/50 p-2 rounded">{quotation.reason}</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600 bg-gray-50 rounded-md p-2">
+                    <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600 bg-gradient-to-r from-gray-50 to-blue-50/50 rounded-lg p-3 border border-gray-100">
                       {totalPrice > 0 && (
-                        <span className="flex items-center font-semibold text-gray-900">
-                          <DollarSign className="h-4 w-4 mr-1" />
+                        <span className="flex items-center font-bold text-gray-900 text-base">
+                          <DollarSign className="h-4 w-4 mr-1 text-green-600" />
                           {currency} {totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       )}
-                      <span className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-1" />
+                      <span className="flex items-center text-gray-600">
+                        <Calendar className="h-4 w-4 mr-1 text-primary-600" />
                         {deliveryDate}
                       </span>
                       <span className="text-gray-500">{terms}</span>
@@ -512,21 +536,21 @@ const Dashboard = () => {
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleApprove(quotation.id)}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
+                        className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 text-sm font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                       >
                         <CheckCircle className="h-4 w-4" />
                         <span>Approve</span>
                       </button>
                       <button
                         onClick={() => handleRequestMeeting(quotation.id)}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                        className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 text-sm font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                       >
                         <Phone className="h-4 w-4" />
                         <span>Request Call</span>
                       </button>
                       <button
                         onClick={() => handleReject(quotation.id)}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                        className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 text-sm font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                       >
                         <X className="h-4 w-4" />
                         <span>Reject</span>
@@ -540,8 +564,16 @@ const Dashboard = () => {
         </div>
 
         {/* Recent Orders Timeline */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Orders Timeline</h2>
+        <div className="card bg-gradient-to-br from-white via-purple-50/20 to-pink-50/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg shadow-md">
+              <Package className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Recent Orders Timeline</h2>
+              <p className="text-sm text-gray-500">Track your latest orders</p>
+            </div>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
@@ -569,34 +601,34 @@ const Dashboard = () => {
                   order.status === 'pending' ? 20 : 0;
 
                 return (
-                  <div key={order.id} className="flex items-start space-x-4">
+                  <div key={order.id} className="flex items-start space-x-4 p-3 rounded-lg hover:bg-white/60 transition-all duration-200">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${
-                        progress === 100 ? 'bg-green-500' : 
-                        progress >= 75 ? 'bg-blue-500' : 
-                        progress >= 50 ? 'bg-yellow-500' : 'bg-gray-300'
+                      <div className={`w-4 h-4 rounded-full shadow-md ${
+                        progress === 100 ? 'bg-gradient-to-br from-green-500 to-emerald-500' : 
+                        progress >= 75 ? 'bg-gradient-to-br from-blue-500 to-indigo-500' : 
+                        progress >= 50 ? 'bg-gradient-to-br from-yellow-500 to-amber-500' : 'bg-gradient-to-br from-gray-400 to-gray-500'
                       }`} />
                       {index < recentOrders.length - 1 && (
-                        <div className="w-0.5 h-8 bg-gray-200 mt-2" />
+                        <div className="w-0.5 h-8 bg-gradient-to-b from-gray-300 to-transparent mt-2" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-mono font-semibold text-gray-900">{formatOrderId(order.id)}</span>
-                        <span className="text-xs text-gray-500">{formatDate(order.created_at)}</span>
+                        <span className="text-sm font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{formatOrderId(order.id)}</span>
+                        <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{formatDate(order.created_at)}</span>
                       </div>
                       <p className="text-sm font-semibold text-gray-900 mb-1">{order.product_name}</p>
                       {order.product_description && (
                         <p className="text-xs text-gray-600 line-clamp-1 mb-2">{order.product_description}</p>
                       )}
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(order.status)}`}>
+                        <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium shadow-sm ${getStatusColor(order.status)}`}>
                           {getStatusIcon(order.status)}
                           <span className="ml-1.5">{formatStatus(order.status)}</span>
                         </span>
                         {order.total_price_estimate && (
-                          <span className="text-xs text-gray-600 flex items-center gap-1">
-                            <DollarSign className="h-3 w-3" />
+                          <span className="text-xs text-gray-700 flex items-center gap-1 font-semibold bg-green-50 px-2 py-1 rounded">
+                            <DollarSign className="h-3 w-3 text-green-600" />
                             {order.currency || 'USD'} {order.total_price_estimate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         )}
