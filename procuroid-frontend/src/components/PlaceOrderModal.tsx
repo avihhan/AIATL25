@@ -82,26 +82,35 @@ const call_function = async (formData: OrderFormData) => {
         currency: formData.currency,
         requiredDeliveryDate: formData.requiredDeliveryDate,
         location: formData.location,
+        buyer_company_name: 'Procuroid Client',
+        seller_company_name: supplier.name,
       },
       supplier.name
     );
     
     if (result.success) {
       console.log(`✅ Call to ${supplier.name} initiated successfully`);
+      console.log('ElevenLabs Response:', result.data);
       
-      // Store supplier call in database
-      const callId = result.data?.call_id || result.data?.id || `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Extract call_id from ElevenLabs response
+      // ElevenLabs typically returns: { call_id: "...", status: "...", ... }
+      const callId = result.data?.call_id || result.data?.conversation_id || result.data?.id;
       
-      const dbResult = await createSupplierCall({
-        supplier_name: supplier.name,
-        call_id: callId,
-        status: 'initiated',
-      });
-      
-      if (dbResult.success) {
-        console.log(`📝 Stored call record for ${supplier.name}`);
+      if (callId) {
+        const dbResult = await createSupplierCall({
+          supplier_name: supplier.name,
+          call_id: callId,
+          status: 'initiated',
+        });
+        
+        if (dbResult.success) {
+          console.log(`📝 Stored call record for ${supplier.name} with call_id: ${callId}`);
+        } else {
+          console.error(`⚠️ Failed to store call record for ${supplier.name}:`, dbResult.error);
+        }
       } else {
-        console.error(`⚠️ Failed to store call record for ${supplier.name}:`, dbResult.error);
+        console.error(`⚠️ No call_id returned from ElevenLabs for ${supplier.name}`);
+        console.error('Full response:', result.data);
       }
     } else {
       console.error(`❌ Failed to call ${supplier.name}:`, result.error);

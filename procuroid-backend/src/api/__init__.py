@@ -628,8 +628,10 @@ def quotation_agent_transcript():
         print("📝 QUOTATION AGENT CALL REPORT")
         print(json.dumps(call_report))
 
-        # Update supplier_calls table with transcript and summary
+        # Update or create supplier_calls table record with transcript and summary
         call_id = call_report["call_id"]
+        print(f"🔍 Looking for supplier_calls record with call_id: {call_id}")
+        
         if call_id:
             try:
                 # Format transcript as text
@@ -641,24 +643,52 @@ def quotation_agent_transcript():
                 # Determine status based on call success
                 status = "completed" if call_connected else "failed"
                 
-                # Update the supplier_calls record
+                print(f"📊 Call Status: {status}")
+                print(f"📝 Transcript length: {len(transcript_text)} characters")
+                print(f"📄 Summary length: {len(summary or '')} characters")
+                
+                # Try to update existing record first
                 update_result = supabase.table("supplier_calls")\
                     .update({
                         "transcript": transcript_text,
                         "summary": summary or "",
                         "status": status,
-                        "call_id": call_id
                     })\
                     .eq("call_id", call_id)\
                     .execute()
                 
-                if update_result.data:
-                    print(f"✅ Updated supplier_calls for call_id: {call_id}")
+                if update_result.data and len(update_result.data) > 0:
+                    print(f"✅ Updated existing supplier_calls for call_id: {call_id}")
+                    print(f"   Updated {len(update_result.data)} record(s)")
+                    print(f"   Supplier: {update_result.data[0].get('supplier_name', 'Unknown')}")
                 else:
-                    print(f"⚠️ No supplier_calls record found for call_id: {call_id}")
+                    # No existing record found, create a new one
+                    print(f"⚠️ No existing supplier_calls record found for call_id: {call_id}")
+                    print(f"💾 Creating new supplier_calls record...")
+                    
+                    # Extract supplier info from call metadata if available
+                    supplier_name = call_report.get("metadata", {}).get("seller_company_name", "Unknown Supplier")
+                    
+                    insert_result = supabase.table("supplier_calls")\
+                        .insert({
+                            "call_id": call_id,
+                            "supplier_name": supplier_name,
+                            "transcript": transcript_text,
+                            "summary": summary or "",
+                            "status": status,
+                        })\
+                        .execute()
+                    
+                    if insert_result.data and len(insert_result.data) > 0:
+                        print(f"✅ Created new supplier_calls record for call_id: {call_id}")
+                        print(f"   Supplier: {supplier_name}")
+                    else:
+                        print(f"❌ Failed to create supplier_calls record")
                     
             except Exception as update_error:
-                print(f"❌ Failed to update supplier_calls: {update_error}")
+                print(f"❌ Failed to update/create supplier_calls: {update_error}")
+                import traceback
+                traceback.print_exc()
 
         return jsonify({"success": True, "call_report": call_report}), 200
 
