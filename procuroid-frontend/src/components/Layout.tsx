@@ -31,7 +31,7 @@ const Layout = ({ children }: LayoutProps) => {
   // Helper function to fetch and update user data
   const fetchUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (user) {
       // Always check profiles table first (most up-to-date)
       const { data: profile } = await supabase
@@ -39,7 +39,7 @@ const Layout = ({ children }: LayoutProps) => {
         .select('display_name, first_name, last_name')
         .eq('id', user.id)
         .single();
-      
+
       if (profile?.display_name) {
         setDisplayName(profile.display_name);
         const names = profile.display_name.split(' ');
@@ -55,7 +55,7 @@ const Layout = ({ children }: LayoutProps) => {
         const metaDisplayName = user.user_metadata?.display_name;
         const firstName = user.user_metadata?.first_name;
         const lastName = user.user_metadata?.last_name;
-        
+
         if (metaDisplayName) {
           setDisplayName(metaDisplayName);
           const names = metaDisplayName.split(' ');
@@ -106,8 +106,16 @@ const Layout = ({ children }: LayoutProps) => {
       <div className="fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-800 shadow-2xl border-r border-slate-700/50">
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-center border-b border-slate-700/50 bg-gradient-to-r from-primary-600/10 to-indigo-600/10">
-            <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-indigo-400 bg-clip-text text-transparent">
+          <div className="flex h-16 items-center justify-center border-b border-slate-700/50 bg-gradient-to-r from-primary-600/10 to-indigo-600/10 space-x-4">
+            <img
+              src="/src/assets/logo.png"
+              alt="Logo"
+              className="h-10 w-10"
+            />
+            <Link
+              to="/"
+              className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-indigo-400 bg-clip-text text-transparent"
+            >
               Procuroid
             </Link>
           </div>
@@ -120,11 +128,10 @@ const Layout = ({ children }: LayoutProps) => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    isActive
+                  className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isActive
                       ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white shadow-lg shadow-primary-500/30'
                       : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <item.icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
                   {item.name}

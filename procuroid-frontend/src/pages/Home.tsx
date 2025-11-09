@@ -20,9 +20,10 @@ export default function Home() {
 
       {/* --- Navbar --- */}
       <nav className="absolute top-0 left-0 w-full z-20 flex justify-between items-center px-8 py-4 bg-black/30 backdrop-blur-md text-white shadow-lg">
-      <Link to="/" className="text-2xl font-bold text-primary-600">Procuroid</Link>
-
-
+        <div className="flex items-center space-x-4">
+          <img src="/src/assets/logo.png" alt="Logo" className="h-10 w-10"/>
+          <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-indigo-400 bg-clip-text text-transparent">Procuroid</Link>
+        </div>
         <div className="space-x-4">
           <button
             onClick={() => navigate('/signin')}
