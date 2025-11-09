@@ -510,6 +510,7 @@ export const getContracts = async (): Promise<GetContractsResponse> => {
     }
   );
   return response.data;
+}
 // ElevenLabs API Configuration from environment variables
 const ELEVENLABS_API_URL = 'https://api.us.elevenlabs.io/v1/convai/twilio/outbound-call';
 const ELEVENLABS_BEARER_TOKEN = import.meta.env.VITE_ELEVENLABS_BEARER_TOKEN;
