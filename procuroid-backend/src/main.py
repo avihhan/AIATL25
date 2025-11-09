@@ -33,10 +33,18 @@ if CORS:
     ]
     CORS(
         app,
-        resources={r"/*": {"origins": allow_list}},
+        resources={r"/*": {
+            "origins": allow_list,
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True
+        }},
         supports_credentials=True,
+        automatic_options=True,  # Automatically handle OPTIONS requests
     )
     print(f"CORS: allowing {allow_list}")
+else:
+    print("WARNING: flask-cors not installed. CORS will not work properly.")
 
 # Register all blueprints
 app.register_blueprint(api_bp)

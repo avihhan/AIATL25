@@ -16,6 +16,10 @@ from services.database import (
     call_quotation_agent,
     update_profile,
     get_profile,
+    create_order,
+    get_orders,
+    get_quotations,
+    update_quotation,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
@@ -31,6 +35,7 @@ def require_auth(f):
     """
     Decorator to require authentication for a route.
     Expects Authorization header with format: Bearer <token>
+    Flask-CORS handles OPTIONS requests automatically before reaching this decorator.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -576,30 +581,396 @@ def list_quote_requests():
     return jsonify(QUOTE_REQUESTS)
 
 
+@api_bp.route("/procurement-jobs/<job_id>/quotations", methods=["GET"])
+@require_auth
+def get_job_quotations(job_id: str):
+    """
+    Get all quotations for a job with AI analysis.
+    Returns detailed comparison data for frontend display.
+    """
+    
+    try:
+        # Fetch all quotations for this job
+        quotations = supabase.table("quotations")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("comparison_metrics->overall_recommendation_score", desc=True)\
+            .execute()
+        
+        # Fetch conversation analyses
+        analyses = supabase.table("conversation_analyses")\
+            .select("*")\
+            .execute()
+        
+        # Combine data
+        enriched_quotations = []
+        for quote in quotations.data:
+            # Find matching analysis
+            analysis = next(
+                (a for a in analyses.data if a["supplier_id"] == quote["supplier_id"]),
+                None
+            )
+            
+            enriched_quotations.append({
+                "id": quote["id"],
+                "supplier": {
+                    "id": quote["supplier_id"],
+                    "name": quote["supplier_name"],
+                    "contact": quote.get("suppliers", {})
+                },
+                "quotation": quote["quotation_data"],
+                "sentiment": quote.get("sentiment_data", {}),
+                "metrics": quote.get("comparison_metrics", {}),
+                "key_points": quote.get("key_points", []),
+                "confidence_score": quote.get("confidence_score", 0),
+                "full_analysis": analysis.get("analysis_data") if analysis else None,
+                "status": quote["status"],
+                "created_at": quote["created_at"]
+            })
+        
+        # Calculate comparison summary
+        summary = _calculate_quotation_summary(enriched_quotations)
+        
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "quotations": enriched_quotations,
+            "summary": summary,
+            "count": len(enriched_quotations)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+def _calculate_quotation_summary(quotations: List[Dict]) -> Dict:
+    """Calculate summary statistics for quotations"""
+    
+    if not quotations:
+        return {}
+    
+    prices = [q["quotation"]["pricing"]["total_price"] 
+              for q in quotations 
+              if q["quotation"].get("pricing", {}).get("total_price")]
+    
+    delivery_days = [q["quotation"]["delivery"]["lead_time_days"]
+                     for q in quotations
+                     if q["quotation"].get("delivery", {}).get("lead_time_days")]
+    
+    return {
+        "total_quotations": len(quotations),
+        "price_range": {
+            "lowest": min(prices) if prices else None,
+            "highest": max(prices) if prices else None,
+            "average": sum(prices) / len(prices) if prices else None
+        },
+        "delivery_range": {
+            "fastest": min(delivery_days) if delivery_days else None,
+            "slowest": max(delivery_days) if delivery_days else None,
+            "average": sum(delivery_days) / len(delivery_days) if delivery_days else None
+        },
+        "top_recommended": quotations[0] if quotations else None
+    }
+
+
+@api_bp.route("/procurement-jobs/<job_id>/meetings", methods=["GET"])
+@require_auth
+def get_job_meetings(job_id: str):
+    """Get all meeting requests for a job"""
+    
+    try:
+        meetings = supabase.table("meeting_requests")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("urgency", desc=True)\
+            .execute()
+        
+        return jsonify({
+            "success": True,
+            "meetings": meetings.data,
+            "count": len(meetings.data)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@api_bp.route("/procurement-jobs/<job_id>/comparison", methods=["GET"])
+@require_auth
+def get_quotation_comparison(job_id: str):
+    """
+    Get side-by-side comparison of all quotations.
+    Optimized for frontend comparison view.
+    """
+    
+    try:
+        quotations = supabase.table("quotations")\
+            .select("*")\
+            .eq("job_id", job_id)\
+            .execute()
+        
+        # Build comparison matrix
+        comparison = {
+            "suppliers": [],
+            "metrics": {
+                "price": [],
+                "delivery": [],
+                "value_score": [],
+                "reliability_score": [],
+                "overall_score": []
+            },
+            "detailed_comparison": []
+        }
+        
+        for quote in quotations.data:
+            supplier_name = quote["supplier_name"]
+            comparison["suppliers"].append(supplier_name)
+            
+            # Extract metrics
+            pricing = quote["quotation_data"].get("pricing", {})
+            delivery = quote["quotation_data"].get("delivery", {})
+            metrics = quote.get("comparison_metrics", {})
+            
+            comparison["metrics"]["price"].append(pricing.get("total_price"))
+            comparison["metrics"]["delivery"].append(delivery.get("lead_time_days"))
+            comparison["metrics"]["value_score"].append(metrics.get("value_score"))
+            comparison["metrics"]["reliability_score"].append(metrics.get("reliability_score"))
+            comparison["metrics"]["overall_score"].append(metrics.get("overall_recommendation_score"))
+            
+            # Detailed comparison
+            comparison["detailed_comparison"].append({
+                "supplier": supplier_name,
+                "price": pricing.get("total_price"),
+                "price_per_unit": pricing.get("price_per_unit"),
+                "delivery_days": delivery.get("lead_time_days"),
+                "payment_terms": quote["quotation_data"].get("terms", {}).get("payment_terms"),
+                "pros": metrics.get("pros", []),
+                "cons": metrics.get("cons", []),
+                "scores": {
+                    "value": metrics.get("value_score"),
+                    "reliability": metrics.get("reliability_score"),
+                    "responsiveness": metrics.get("responsiveness_score"),
+                    "flexibility": metrics.get("flexibility_score"),
+                    "overall": metrics.get("overall_recommendation_score")
+                }
+            })
+        
+        return jsonify({
+            "success": True,
+            "comparison": comparison
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 @api_bp.route("/profile", methods=["GET"])
 @require_auth
-def get_profile_endpoint():
+def get_job_quotations(job_id: str):
     """
-    Get the authenticated user's profile.
+    Get all quotations for a job with AI analysis.
+    Returns detailed comparison data for frontend display.
     """
+    
     try:
-        user_id = request.user["id"]
-        result = get_profile(user_id)
+        # Fetch all quotations for this job
+        quotations = supabase.table("quotations")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("comparison_metrics->overall_recommendation_score", desc=True)\
+            .execute()
         
-        if result.get("success"):
-            return jsonify(result), 200
-        else:
-            return jsonify(result), 404
+        # Fetch conversation analyses
+        analyses = supabase.table("conversation_analyses")\
+            .select("*")\
+            .execute()
+        
+        # Combine data
+        enriched_quotations = []
+        for quote in quotations.data:
+            # Find matching analysis
+            analysis = next(
+                (a for a in analyses.data if a["supplier_id"] == quote["supplier_id"]),
+                None
+            )
+            
+            enriched_quotations.append({
+                "id": quote["id"],
+                "supplier": {
+                    "id": quote["supplier_id"],
+                    "name": quote["supplier_name"],
+                    "contact": quote.get("suppliers", {})
+                },
+                "quotation": quote["quotation_data"],
+                "sentiment": quote.get("sentiment_data", {}),
+                "metrics": quote.get("comparison_metrics", {}),
+                "key_points": quote.get("key_points", []),
+                "confidence_score": quote.get("confidence_score", 0),
+                "full_analysis": analysis.get("analysis_data") if analysis else None,
+                "status": quote["status"],
+                "created_at": quote["created_at"]
+            })
+        
+        # Calculate comparison summary
+        summary = _calculate_quotation_summary(enriched_quotations)
+        
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "quotations": enriched_quotations,
+            "summary": summary,
+            "count": len(enriched_quotations)
+        }), 200
+        
     except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+def _calculate_quotation_summary(quotations: List[Dict]) -> Dict:
+    """Calculate summary statistics for quotations"""
+    
+    if not quotations:
+        return {}
+    
+    prices = [q["quotation"]["pricing"]["total_price"] 
+              for q in quotations 
+              if q["quotation"].get("pricing", {}).get("total_price")]
+    
+    delivery_days = [q["quotation"]["delivery"]["lead_time_days"]
+                     for q in quotations
+                     if q["quotation"].get("delivery", {}).get("lead_time_days")]
+    
+    return {
+        "total_quotations": len(quotations),
+        "price_range": {
+            "lowest": min(prices) if prices else None,
+            "highest": max(prices) if prices else None,
+            "average": sum(prices) / len(prices) if prices else None
+        },
+        "delivery_range": {
+            "fastest": min(delivery_days) if delivery_days else None,
+            "slowest": max(delivery_days) if delivery_days else None,
+            "average": sum(delivery_days) / len(delivery_days) if delivery_days else None
+        },
+        "top_recommended": quotations[0] if quotations else None
+    }
+
+
+@api_bp.route("/procurement-jobs/<job_id>/meetings", methods=["GET"])
+@require_auth
+def get_job_meetings(job_id: str):
+    """Get all meeting requests for a job"""
+    
+    try:
+        meetings = supabase.table("meeting_requests")\
+            .select("*, suppliers(*)")\
+            .eq("job_id", job_id)\
+            .order("urgency", desc=True)\
+            .execute()
+        
+        return jsonify({
+            "success": True,
+            "meetings": meetings.data,
+            "count": len(meetings.data)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@api_bp.route("/procurement-jobs/<job_id>/comparison", methods=["GET"])
+@require_auth
+def get_quotation_comparison(job_id: str):
+    """
+    Get side-by-side comparison of all quotations.
+    Optimized for frontend comparison view.
+    """
+    
+    try:
+        quotations = supabase.table("quotations")\
+            .select("*")\
+            .eq("job_id", job_id)\
+            .execute()
+        
+        # Build comparison matrix
+        comparison = {
+            "suppliers": [],
+            "metrics": {
+                "price": [],
+                "delivery": [],
+                "value_score": [],
+                "reliability_score": [],
+                "overall_score": []
+            },
+            "detailed_comparison": []
+        }
+        
+        for quote in quotations.data:
+            supplier_name = quote["supplier_name"]
+            comparison["suppliers"].append(supplier_name)
+            
+            # Extract metrics
+            pricing = quote["quotation_data"].get("pricing", {})
+            delivery = quote["quotation_data"].get("delivery", {})
+            metrics = quote.get("comparison_metrics", {})
+            
+            comparison["metrics"]["price"].append(pricing.get("total_price"))
+            comparison["metrics"]["delivery"].append(delivery.get("lead_time_days"))
+            comparison["metrics"]["value_score"].append(metrics.get("value_score"))
+            comparison["metrics"]["reliability_score"].append(metrics.get("reliability_score"))
+            comparison["metrics"]["overall_score"].append(metrics.get("overall_recommendation_score"))
+            
+            # Detailed comparison
+            comparison["detailed_comparison"].append({
+                "supplier": supplier_name,
+                "price": pricing.get("total_price"),
+                "price_per_unit": pricing.get("price_per_unit"),
+                "delivery_days": delivery.get("lead_time_days"),
+                "payment_terms": quote["quotation_data"].get("terms", {}).get("payment_terms"),
+                "pros": metrics.get("pros", []),
+                "cons": metrics.get("cons", []),
+                "scores": {
+                    "value": metrics.get("value_score"),
+                    "reliability": metrics.get("reliability_score"),
+                    "responsiveness": metrics.get("responsiveness_score"),
+                    "flexibility": metrics.get("flexibility_score"),
+                    "overall": metrics.get("overall_recommendation_score")
+                }
+            })
+        
+        return jsonify({
+            "success": True,
+            "comparison": comparison
+        }), 200
+        
+    except Exception as e:
+        print(f"Exception in update_profile_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@api_bp.route("/profile", methods=["PATCH"])
+@api_bp.route("/orders", methods=["POST"])
 @require_auth
-def update_profile_endpoint():
+def create_order_endpoint():
     """
-    Update the authenticated user's profile.
-    Request body should contain profile information to update.
+    Create a new order.
+    Request body should contain order information.
     """
     try:
         data = request.get_json()
@@ -607,23 +978,106 @@ def update_profile_endpoint():
         if not data:
             return jsonify({"success": False, "error": "No data provided"}), 400
         
+        # Get the authenticated user's ID from the token
+        authenticated_user_id = request.user["id"]
+        
+        # Create order in database
+        result = create_order(authenticated_user_id, data)
+        
+        if result.get("success"):
+            return jsonify({
+                "success": True,
+                "message": "Order created successfully",
+                "order": result["order"]
+            }), 201
+        else:
+            return jsonify({
+                "success": False,
+                "error": result.get("error", "Failed to create order")
+            }), 500
+    except Exception as e:
+        print(f"Exception in create_order_endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/orders", methods=["GET"])
+@require_auth
+def get_orders_endpoint():
+    """
+    Get all orders for the authenticated user.
+    Query parameters:
+    - status: Optional status filter
+    """
+    try:
+        status = request.args.get("status", None)
         user_id = request.user["id"]
         
-        # Log the incoming data for debugging
-        print(f"Updating profile for user {user_id}: {data}")
-        
-        # Update profile in database
-        result = update_profile(user_id, data)
+        result = get_orders(user_id, status)
         
         if result.get("success"):
             return jsonify(result), 200
         else:
-            # Log the error for debugging
-            error_msg = result.get("error", "Unknown error")
-            print(f"Profile update failed: {error_msg}")
-            return jsonify(result), 400
+            return jsonify(result), 500
     except Exception as e:
-        print(f"Exception in update_profile_endpoint: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Exception in get_orders_endpoint: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/quotations", methods=["GET"])
+@require_auth
+def get_quotations_endpoint():
+    """
+    Get all quotations for the authenticated user.
+    Query parameters:
+    - status: Optional status filter (e.g., 'pending_approval')
+    """
+    try:
+        status = request.args.get("status", None)
+        user_id = request.user["id"]
+        
+        result = get_quotations(user_id, status)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        print(f"Exception in get_quotations_endpoint: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/quotations/<quotation_id>", methods=["PATCH"])
+@require_auth
+def update_quotation_endpoint(quotation_id):
+    """
+    Update a quotation (e.g., approve or reject).
+    
+    Expected payload:
+    {
+        "status": "approved" | "rejected"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Only allow updating status for now
+        allowed_fields = ["status"]
+        updates = {k: v for k, v in data.items() if k in allowed_fields}
+        
+        if not updates:
+            return jsonify({"error": "No valid fields to update"}), 400
+        
+        result = update_quotation(quotation_id, updates)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        print(f"Exception in update_quotation_endpoint: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
