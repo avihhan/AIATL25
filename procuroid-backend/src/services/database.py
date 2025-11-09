@@ -388,14 +388,22 @@ def call_quotation_agent(procurement_jobs: List[Dict[str, Any]]) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def get_suppliers(page: int = 1, page_size: int = 10, search: Optional[str] = None) -> dict:
+def get_suppliers(
+    page: int = 1, 
+    page_size: int = 10, 
+    search: Optional[str] = None,
+    sort_by: str = "name",
+    sort_order: str = "asc"
+) -> dict:
     """
-    Get suppliers from supplier table with pagination and optional search.
+    Get suppliers from supplier table with pagination, optional search, and sorting.
     
     Args:
         page: Page number (1-indexed)
         page_size: Number of items per page (default 10, max 100)
         search: Optional search term to filter by supplier name or other fields
+        sort_by: Field to sort by (default: 'name')
+        sort_order: Sort order 'asc' or 'desc' (default: 'asc')
         
     Returns:
         dict: Response with suppliers, pagination metadata, or error message
@@ -416,8 +424,38 @@ def get_suppliers(page: int = 1, page_size: int = 10, search: Optional[str] = No
         
         # Add search filter if provided (adjust column names as needed)
         if search:
-            # Search across common supplier fields
-            query = query.or_(f"supplier_name.ilike.%{search}%,contact_email.ilike.%{search}%,company_name.ilike.%{search}%")
+            # Search across common supplier fields using OR conditions
+            # Supabase Python client or_() method expects PostgREST filter format
+            # Format: "column1.ilike.pattern,column2.ilike.pattern"
+            search_pattern = f"%{search}%"
+            # Use or_ with proper PostgREST filter format
+            # The or_ method expects filters in the format: "col1.op.val1,col2.op.val2"
+            # Note: The % characters need to be URL encoded, but Supabase client should handle this
+            try:
+                # Build the filter string for OR search
+                # Format: "column1.ilike.pattern,column2.ilike.pattern"
+                filter_string = f"company_name.ilike.{search_pattern},contact_person.ilike.{search_pattern},email.ilike.{search_pattern}"
+                query = query.or_(filter_string)
+            except Exception as e:
+                # If or_ fails, use a simpler approach - search only company_name
+                print(f"OR search failed: {e}, falling back to single field search")
+                query = query.ilike("company_name", search_pattern)
+        
+        # Map frontend sort field names to database column names
+        sort_field_map = {
+            "name": "company_name",
+            "rating": "rating",
+            "status": "status",
+            "total_orders": "total_orders",
+            "created_at": "created_at"
+        }
+        
+        # Get the database column name, default to company_name
+        db_sort_field = sort_field_map.get(sort_by, "company_name")
+        desc = sort_order.lower() == "desc"
+        
+        # Apply sorting
+        query = query.order(db_sort_field, desc=desc)
         
         # Apply pagination
         query = query.range(offset, offset + page_size - 1)
@@ -443,4 +481,380 @@ def get_suppliers(page: int = 1, page_size: int = 10, search: Optional[str] = No
         }
     except Exception as e:
         print(f"Get suppliers error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def create_supplier(supplier_data: dict) -> dict:
+    """
+    Create a new supplier in the supplier database.
+    
+    Args:
+        supplier_data: Dictionary containing supplier information
+        
+    Returns:
+        dict: Response with created supplier or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Prepare the data for insertion
+        insert_data = {}
+        
+        # Required field
+        if not supplier_data.get("company_name"):
+            return {"success": False, "error": "company_name is required"}
+        insert_data["company_name"] = supplier_data["company_name"]
+        
+        # Optional basic info fields
+        if supplier_data.get("contact_person"):
+            insert_data["contact_person"] = supplier_data["contact_person"]
+        if supplier_data.get("email"):
+            insert_data["email"] = supplier_data["email"]
+        if supplier_data.get("phone_number"):
+            insert_data["phone_number"] = supplier_data["phone_number"]
+        if supplier_data.get("address"):
+            insert_data["address"] = supplier_data["address"]
+        if supplier_data.get("country"):
+            insert_data["country"] = supplier_data["country"]
+        if supplier_data.get("website"):
+            insert_data["website"] = supplier_data["website"]
+        if supplier_data.get("image_url"):
+            insert_data["image_url"] = supplier_data["image_url"]
+        
+        # Supplier classification
+        if supplier_data.get("supplier_type"):
+            insert_data["supplier_type"] = supplier_data["supplier_type"]
+        if supplier_data.get("category"):
+            insert_data["category"] = supplier_data["category"]
+        if supplier_data.get("product_keywords"):
+            insert_data["product_keywords"] = supplier_data["product_keywords"]
+        
+        # Capabilities & Compliance
+        if supplier_data.get("product_certifications"):
+            insert_data["product_certifications"] = supplier_data["product_certifications"]
+        if supplier_data.get("min_order_quantity") is not None:
+            insert_data["min_order_quantity"] = supplier_data["min_order_quantity"]
+        if supplier_data.get("delivery_regions"):
+            insert_data["delivery_regions"] = supplier_data["delivery_regions"]
+        if supplier_data.get("average_lead_time"):
+            insert_data["average_lead_time"] = supplier_data["average_lead_time"]
+        
+        # Pricing Info
+        if supplier_data.get("currency"):
+            insert_data["currency"] = supplier_data["currency"]
+        if supplier_data.get("typical_unit_price") is not None:
+            insert_data["typical_unit_price"] = supplier_data["typical_unit_price"]
+        if supplier_data.get("negotiation_flexibility"):
+            insert_data["negotiation_flexibility"] = supplier_data["negotiation_flexibility"]
+        
+        # Communication
+        if supplier_data.get("preferred_contact_method"):
+            insert_data["preferred_contact_method"] = supplier_data["preferred_contact_method"]
+        
+        # Insert the supplier
+        response = supabase_admin.table("suppliers").insert(insert_data).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "supplier": response.data[0]
+            }
+        else:
+            return {"success": False, "error": "Failed to create supplier"}
+            
+    except Exception as e:
+        print(f"Create supplier error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def update_supplier(supplier_id: str, supplier_data: dict) -> dict:
+    """
+    Update an existing supplier in the supplier database.
+    
+    Args:
+        supplier_id: The ID of the supplier to update
+        supplier_data: Dictionary containing supplier information to update
+        
+    Returns:
+        dict: Response with updated supplier or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Prepare the data for update
+        update_data = {}
+        
+        # Optional basic info fields
+        if supplier_data.get("company_name"):
+            update_data["company_name"] = supplier_data["company_name"]
+        if supplier_data.get("contact_person"):
+            update_data["contact_person"] = supplier_data["contact_person"]
+        if supplier_data.get("email"):
+            update_data["email"] = supplier_data["email"]
+        if supplier_data.get("phone_number"):
+            update_data["phone_number"] = supplier_data["phone_number"]
+        if supplier_data.get("address"):
+            update_data["address"] = supplier_data["address"]
+        if supplier_data.get("country"):
+            update_data["country"] = supplier_data["country"]
+        if supplier_data.get("website"):
+            update_data["website"] = supplier_data["website"]
+        if supplier_data.get("image_url"):
+            update_data["image_url"] = supplier_data["image_url"]
+        
+        # Supplier classification
+        if supplier_data.get("supplier_type"):
+            update_data["supplier_type"] = supplier_data["supplier_type"]
+        if supplier_data.get("category"):
+            update_data["category"] = supplier_data["category"]
+        if supplier_data.get("product_keywords"):
+            update_data["product_keywords"] = supplier_data["product_keywords"]
+        
+        # Capabilities & Compliance
+        if supplier_data.get("product_certifications"):
+            update_data["product_certifications"] = supplier_data["product_certifications"]
+        if supplier_data.get("min_order_quantity") is not None:
+            update_data["min_order_quantity"] = supplier_data["min_order_quantity"]
+        if supplier_data.get("delivery_regions"):
+            update_data["delivery_regions"] = supplier_data["delivery_regions"]
+        if supplier_data.get("average_lead_time"):
+            update_data["average_lead_time"] = supplier_data["average_lead_time"]
+        
+        # Pricing Info
+        if supplier_data.get("currency"):
+            update_data["currency"] = supplier_data["currency"]
+        if supplier_data.get("typical_unit_price") is not None:
+            update_data["typical_unit_price"] = supplier_data["typical_unit_price"]
+        if supplier_data.get("negotiation_flexibility"):
+            update_data["negotiation_flexibility"] = supplier_data["negotiation_flexibility"]
+        
+        # Communication
+        if supplier_data.get("preferred_contact_method"):
+            update_data["preferred_contact_method"] = supplier_data["preferred_contact_method"]
+        
+        # Update the supplier
+        response = supabase_admin.table("suppliers").update(update_data).eq("id", supplier_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "supplier": response.data[0]
+            }
+        else:
+            return {"success": False, "error": "Supplier not found or failed to update"}
+            
+    except Exception as e:
+        print(f"Update supplier error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def delete_supplier(supplier_id: str) -> dict:
+    """
+    Delete a supplier from the supplier database.
+    
+    Args:
+        supplier_id: The ID of the supplier to delete
+        
+    Returns:
+        dict: Response with success status or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Delete the supplier
+        response = supabase_admin.table("suppliers").delete().eq("id", supplier_id).execute()
+        
+        # Check if deletion was successful
+        # If response.data exists and is empty, it means the record was deleted
+        # If response.data is None or empty list, the record might not have existed
+        if response.data is not None:
+            return {
+                "success": True,
+                "message": "Supplier deleted successfully"
+            }
+        else:
+            return {"success": False, "error": "Supplier not found"}
+            
+    except Exception as e:
+        print(f"Delete supplier error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def update_profile(user_id: str, profile_data: dict) -> dict:
+    """
+    Update a user's profile in the profiles table.
+    
+    Args:
+        user_id: The user's UUID
+        profile_data: Dictionary containing profile information to update
+            - display_name: Optional display name
+            - first_name: Optional first name
+            - last_name: Optional last name
+            - theme: Optional theme preference ('light', 'dark', 'system')
+            - density: Optional density preference ('comfortable', 'compact')
+            - language: Optional language preference
+            - timezone: Optional timezone
+            - notifications: Optional notifications settings (JSONB)
+            - two_factor_enabled: Optional two-factor authentication flag
+        
+    Returns:
+        dict: Response with updated profile or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Prepare the data for update
+        # Start with basic fields that should always exist
+        update_data = {}
+        
+        # Basic profile fields (should exist in all profiles tables)
+        if "display_name" in profile_data:
+            update_data["display_name"] = profile_data["display_name"] if profile_data["display_name"] else None
+        if "first_name" in profile_data:
+            update_data["first_name"] = profile_data["first_name"] if profile_data["first_name"] else None
+        if "last_name" in profile_data:
+            update_data["last_name"] = profile_data["last_name"] if profile_data["last_name"] else None
+        
+        # Extended fields (may not exist if migration hasn't been run)
+        # We'll try to update these, but if they fail, we'll fall back to basic fields only
+        extended_fields = {}
+        if "theme" in profile_data:
+            extended_fields["theme"] = profile_data["theme"]
+        if "density" in profile_data:
+            extended_fields["density"] = profile_data["density"]
+        if "language" in profile_data:
+            extended_fields["language"] = profile_data["language"]
+        if "timezone" in profile_data:
+            extended_fields["timezone"] = profile_data["timezone"]
+        if "notifications" in profile_data:
+            extended_fields["notifications"] = profile_data["notifications"]
+        if "two_factor_enabled" in profile_data:
+            extended_fields["two_factor_enabled"] = profile_data["two_factor_enabled"]
+        
+        # Merge extended fields into update_data
+        update_data.update(extended_fields)
+        
+        # If no fields to update, return error
+        if not update_data:
+            return {"success": False, "error": "No valid fields to update"}
+        
+        # Update the profile
+        # First, try to update with all fields (including extended fields)
+        print(f"Attempting to update profile with data: {update_data}")
+        try:
+            response = supabase_admin.table("profiles").update(update_data).eq("id", user_id).execute()
+        except Exception as e:
+            # If update fails due to missing columns, try with only basic fields
+            error_str = str(e)
+            error_dict = {}
+            if hasattr(e, '__dict__'):
+                error_dict = e.__dict__
+            elif isinstance(e, dict):
+                error_dict = e
+            
+            # Check if it's a column not found error
+            is_column_error = (
+                "PGRST204" in error_str or 
+                "column" in error_str.lower() or 
+                "schema cache" in error_str.lower() or
+                (isinstance(error_dict, dict) and error_dict.get("code") == "PGRST204")
+            )
+            
+            if is_column_error:
+                print(f"Extended columns not found, falling back to basic fields only. Error: {error_str}")
+                # Remove extended fields and try again with only basic fields
+                basic_update_data = {
+                    k: v for k, v in update_data.items() 
+                    if k in ["display_name", "first_name", "last_name"]
+                }
+                if not basic_update_data:
+                    return {
+                        "success": False, 
+                        "error": "Database migration required. Please run the migration to add profile settings columns (theme, density, language, timezone, notifications, two_factor_enabled). See RUN_MIGRATION.md for instructions."
+                    }
+                print(f"Retrying with basic fields only: {basic_update_data}")
+                try:
+                    response = supabase_admin.table("profiles").update(basic_update_data).eq("id", user_id).execute()
+                except Exception as retry_error:
+                    error_msg = f"Failed to update profile even with basic fields: {str(retry_error)}"
+                    print(error_msg)
+                    return {"success": False, "error": error_msg}
+            else:
+                # Re-raise if it's a different error
+                raise
+        
+        # Check for errors in the response
+        if hasattr(response, 'error') and response.error:
+            error_msg = f"Supabase error: {response.error}"
+            print(error_msg)
+            return {"success": False, "error": error_msg}
+        
+        if response.data and len(response.data) > 0:
+            print(f"Profile updated successfully: {response.data[0]}")
+            return {
+                "success": True,
+                "profile": response.data[0]
+            }
+        else:
+            # Profile might not exist, try to create it
+            print(f"Profile not found, attempting to create with data: {update_data}")
+            insert_data = {"id": user_id}
+            insert_data.update(update_data)
+            insert_response = supabase_admin.table("profiles").insert(insert_data).execute()
+            
+            # Check for errors in the insert response
+            if hasattr(insert_response, 'error') and insert_response.error:
+                error_msg = f"Supabase insert error: {insert_response.error}"
+                print(error_msg)
+                return {"success": False, "error": error_msg}
+            
+            if insert_response.data and len(insert_response.data) > 0:
+                print(f"Profile created successfully: {insert_response.data[0]}")
+                return {
+                    "success": True,
+                    "profile": insert_response.data[0]
+                }
+            else:
+                error_msg = "Failed to update or create profile - no data returned"
+                print(error_msg)
+                return {"success": False, "error": error_msg}
+            
+    except Exception as e:
+        error_msg = f"Update profile exception: {str(e)}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": error_msg}
+
+
+def get_profile(user_id: str) -> dict:
+    """
+    Get a user's profile from the profiles table.
+    
+    Args:
+        user_id: The user's UUID
+        
+    Returns:
+        dict: Response with profile data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        response = supabase_admin.table("profiles").select("*").eq("id", user_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "profile": response.data[0]
+            }
+        else:
+            return {"success": False, "error": "Profile not found"}
+            
+    except Exception as e:
+        print(f"Get profile error: {e}")
         return {"success": False, "error": str(e)}

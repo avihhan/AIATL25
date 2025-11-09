@@ -86,7 +86,9 @@ export interface SuppliersResponse {
 export const getSuppliers = async (
   page: number = 1,
   pageSize: number = 10,
-  search?: string
+  search?: string,
+  sortBy?: string,
+  sortOrder?: 'asc' | 'desc'
 ): Promise<SuppliersResponse> => {
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -102,9 +104,180 @@ export const getSuppliers = async (
   if (search) {
     params.append('search', search);
   }
+  
+  if (sortBy) {
+    params.append('sort_by', sortBy);
+  }
+  
+  if (sortOrder) {
+    params.append('sort_order', sortOrder);
+  }
 
   const response = await axios.get(
     `${API_BASE_URL}/suppliers?${params.toString()}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface CreateSupplierPayload {
+  company_name: string;
+  contact_person?: string;
+  email?: string;
+  phone_number?: string;
+  address?: string;
+  country?: string;
+  website?: string;
+  supplier_type?: 'manufacturer' | 'distributor' | 'service_provider';
+  category?: string;
+  product_keywords?: string[];
+  product_certifications?: string[];
+  min_order_quantity?: number | null;
+  delivery_regions?: string[];
+  average_lead_time?: string;
+  currency?: string;
+  typical_unit_price?: number | null;
+  negotiation_flexibility?: 'low' | 'medium' | 'high';
+  preferred_contact_method?: 'email' | 'phone' | 'both';
+}
+
+export interface CreateSupplierResponse {
+  success: boolean;
+  supplier?: any;
+  error?: string;
+}
+
+export const createSupplier = async (payload: CreateSupplierPayload): Promise<CreateSupplierResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.post(
+    `${API_BASE_URL}/suppliers`,
+    payload,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface UpdateSupplierPayload extends CreateSupplierPayload {
+  // All fields are optional for updates
+}
+
+export interface UpdateSupplierResponse {
+  success: boolean;
+  supplier?: any;
+  error?: string;
+}
+
+export const updateSupplier = async (supplierId: string, payload: UpdateSupplierPayload): Promise<UpdateSupplierResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.patch(
+    `${API_BASE_URL}/suppliers/${encodeURIComponent(supplierId)}`,
+    payload,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface DeleteSupplierResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export const deleteSupplier = async (supplierId: string): Promise<DeleteSupplierResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.delete(
+    `${API_BASE_URL}/suppliers/${encodeURIComponent(supplierId)}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export interface UpdateProfilePayload {
+  display_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  theme?: 'light' | 'dark' | 'system';
+  density?: 'comfortable' | 'compact';
+  language?: string;
+  timezone?: string;
+  notifications?: {
+    email?: boolean;
+    marketing?: boolean;
+    system?: boolean;
+  };
+  two_factor_enabled?: boolean;
+}
+
+export interface ProfileResponse {
+  success: boolean;
+  profile?: any;
+  error?: string;
+}
+
+export const updateProfile = async (payload: UpdateProfilePayload): Promise<ProfileResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.patch(
+    `${API_BASE_URL}/profile`,
+    payload,
+    {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      withCredentials: true
+    }
+  );
+  return response.data;
+};
+
+export const getProfile = async (): Promise<ProfileResponse> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await axios.get(
+    `${API_BASE_URL}/profile`,
     {
       headers: {
         'Authorization': `Bearer ${session.access_token}`

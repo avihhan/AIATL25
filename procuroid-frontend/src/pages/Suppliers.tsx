@@ -18,9 +18,18 @@ import {
   Edit,
   ExternalLink,
   CheckCircle2,
-  Clock
+  Clock,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Trash2
 } from 'lucide-react';
-import { getSuppliers } from '../api/apiCalls';
+import { getSuppliers, deleteSupplier } from '../api/apiCalls';
+import AddSupplierModal from '../components/AddSupplierModal';
+import EditSupplierModal from '../components/EditSupplierModal';
+
+type SortField = 'name' | 'rating' | 'status' | 'total_orders' | 'created_at';
+type SortOrder = 'asc' | 'desc';
 
 const Suppliers = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +38,11 @@ const Suppliers = () => {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<SortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [pagination, setPagination] = useState({
     page: 1,
     page_size: 10,
@@ -38,13 +52,62 @@ const Suppliers = () => {
     has_previous: false,
   });
 
-  // Fetch suppliers on component mount and when page changes
+  // Debounced search - fetch suppliers when search term, sort, or initial load changes
   useEffect(() => {
+    const timer = setTimeout(() => {
+      const fetchSuppliers = async () => {
+        setLoading(true);
+        setError(null);
+        // Reset to page 1 when searching or sorting changes (but not on page changes)
+        const shouldResetPage = isInitialLoad || searchTerm;
+        if (shouldResetPage) {
+          setPagination(prev => ({ ...prev, page: 1 }));
+        }
+        try {
+          const result = await getSuppliers(
+            1, // Always use page 1 for search/sort/initial load
+            pagination.page_size, 
+            searchTerm || undefined,
+            sortBy,
+            sortOrder
+          );
+          if (result.success) {
+            setSuppliers(result.suppliers);
+            setPagination(result.pagination);
+            setIsInitialLoad(false);
+          } else {
+            setError('Failed to fetch suppliers');
+          }
+        } catch (err: any) {
+          setError(err.message || 'Failed to fetch suppliers');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchSuppliers();
+    }, searchTerm ? 200 : 0); // 200ms debounce for search (updates as you type), immediate for sort
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, sortBy, sortOrder]);
+
+  // Fetch suppliers when page changes (but not when search/sort changes - handled above)
+  useEffect(() => {
+    // Skip initial load and page 1 (handled by search/sort effect above)
+    if (isInitialLoad || pagination.page === 1) {
+      return;
+    }
+
     const fetchSuppliers = async () => {
       setLoading(true);
       setError(null);
       try {
-        const result = await getSuppliers(pagination.page, pagination.page_size);
+        const result = await getSuppliers(
+          pagination.page, 
+          pagination.page_size, 
+          searchTerm || undefined,
+          sortBy,
+          sortOrder
+        );
         if (result.success) {
           setSuppliers(result.suppliers);
           setPagination(result.pagination);
@@ -60,31 +123,6 @@ const Suppliers = () => {
 
     fetchSuppliers();
   }, [pagination.page]);
-
-  // Debounced search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const fetchSuppliers = async () => {
-        setLoading(true);
-        try {
-          const result = await getSuppliers(1, pagination.page_size, searchTerm || undefined);
-          if (result.success) {
-            setSuppliers(result.suppliers);
-            setPagination(result.pagination);
-          }
-        } catch (err: any) {
-          setError(err.message || 'Failed to fetch suppliers');
-        } finally {
-          setLoading(false);
-        }
-      };
-      if (searchTerm || pagination.page === 1) {
-        fetchSuppliers();
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -106,6 +144,68 @@ const Suppliers = () => {
     return 'text-red-600';
   };
 
+  // Suppliers are now sorted on the backend, so we use them directly
+  const sortedSuppliers = suppliers;
+
+  const handleSortChange = (field: SortField) => {
+    if (sortBy === field) {
+      // Toggle sort order if clicking the same field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new sort field and default to ascending
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    // Reset to page 1 when sorting changes
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const result = await deleteSupplier(supplierId);
+      
+      if (result.success) {
+        // Clear selected supplier if it was deleted
+        if (selectedSupplier && (selectedSupplier.id === supplierId || selectedSupplier.supplier_id === supplierId)) {
+          setSelectedSupplier(null);
+        }
+        
+        // Refresh suppliers list
+        const fetchSuppliers = async () => {
+          try {
+            const result = await getSuppliers(
+              pagination.page, 
+              pagination.page_size, 
+              searchTerm || undefined,
+              sortBy,
+              sortOrder
+            );
+            if (result.success) {
+              setSuppliers(result.suppliers);
+              setPagination(result.pagination);
+            } else {
+              setError('Failed to fetch suppliers');
+            }
+          } catch (err: any) {
+            setError(err.message || 'Failed to fetch suppliers');
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchSuppliers();
+      } else {
+        setError(result.error || 'Failed to delete supplier');
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete supplier');
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -114,7 +214,10 @@ const Suppliers = () => {
           <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
           <p className="text-gray-600">Manage your supplier relationships and performance</p>
         </div>
-        <button className="btn-primary flex items-center space-x-2">
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="btn-primary flex items-center space-x-2"
+        >
           <Plus className="h-4 w-4" />
           <span>Add Supplier</span>
         </button>
@@ -127,7 +230,7 @@ const Suppliers = () => {
             {/* Header */}
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Supplier Directory</h2>
-              <div className="relative">
+              <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
@@ -136,6 +239,35 @@ const Suppliers = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 />
+              </div>
+              {/* Sort Controls */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                  <ArrowUpDown className="h-3 w-3" />
+                  Sort by:
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value as SortField)}
+                  className="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  <option value="name">Name</option>
+                  <option value="rating">Rating</option>
+                  <option value="status">Status</option>
+                  <option value="total_orders">Total Orders</option>
+                  <option value="created_at">Date Created</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                >
+                  {sortOrder === 'asc' ? (
+                    <ArrowUp className="h-3 w-3 text-gray-600" />
+                  ) : (
+                    <ArrowDown className="h-3 w-3 text-gray-600" />
+                  )}
+                </button>
               </div>
             </div>
             
@@ -147,12 +279,27 @@ const Suppliers = () => {
               {error && (
                 <div className="text-center py-8 text-sm text-red-500">Error: {error}</div>
               )}
-              {!loading && !error && suppliers.length === 0 && (
+              {!loading && !error && sortedSuppliers.length === 0 && (
                 <div className="text-center py-8 text-sm text-gray-500">No suppliers found</div>
               )}
-              {!loading && !error && suppliers.map((supplier) => {
+              {!loading && !error && sortedSuppliers.map((supplier) => {
                 const isSelected = selectedSupplier?.id === supplier.id || 
                                   selectedSupplier?.supplier_id === supplier.supplier_id;
+                const supplierName = supplier.name || supplier.supplier_name || supplier.company_name || 'N/A';
+                const totalOrders = supplier.total_orders || supplier.orders_count || 0;
+                const rating = supplier.rating || 0;
+                const status = supplier.status || 'N/A';
+                const createdDate = supplier.created_at 
+                  ? new Date(supplier.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'N/A';
+                const logoUrl = supplier.image_url || supplier.logo_url || supplier.logo;
+                const initials = supplierName
+                  .split(' ')
+                  .map((word: string) => word[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2);
+                
                 return (
                   <div
                     key={supplier.id || supplier.supplier_id}
@@ -164,30 +311,74 @@ const Suppliers = () => {
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden ${
                         isSelected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        <Building2 className="h-5 w-5" />
+                        {logoUrl ? (
+                          <img 
+                            src={logoUrl} 
+                            alt={supplierName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to initials if image fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `<span class="text-xs font-semibold">${initials}</span>`;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold">{initials}</span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm text-gray-900 truncate mb-1">
-                          {supplier.name || supplier.supplier_name || supplier.company_name || 'N/A'}
+                        {/* Name */}
+                        <h3 className="font-medium text-sm text-gray-900 truncate mb-2">
+                          {supplierName}
                         </h3>
-                        <p className="text-xs text-gray-600 truncate mb-2">
-                          {supplier.email || supplier.contact_email || supplier.contact || 'N/A'}
-                        </p>
-                        <div className="flex items-center justify-between gap-2">
-                          {supplier.rating ? (
-                            <div className="flex items-center gap-1">
-                              <Star className="h-3 w-3 text-yellow-400 fill-current" />
-                              <span className="text-xs text-gray-600">{supplier.rating.toFixed(1)}</span>
-                            </div>
-                          ) : null}
-                          {supplier.status && (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(supplier.status)}`}>
-                              {supplier.status}
+                        
+                        {/* All Sortable Info Grid */}
+                        <div className="space-y-1.5">
+                          {/* Rating */}
+                          <div className="flex items-center gap-2">
+                            <Star className="h-3 w-3 text-yellow-400 fill-current flex-shrink-0" />
+                            <span className="text-xs text-gray-600">
+                              <span className="font-medium">Rating:</span> {rating > 0 ? rating.toFixed(1) : 'N/A'}
                             </span>
-                          )}
+                          </div>
+                          
+                          {/* Status */}
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                            <span className="text-xs text-gray-600">
+                              <span className="font-medium">Status:</span>{' '}
+                              {status !== 'N/A' ? (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(status)}`}>
+                                  {status}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500">N/A</span>
+                              )}
+                            </span>
+                          </div>
+                          
+                          {/* Total Orders */}
+                          <div className="flex items-center gap-2">
+                            <Package className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                            <span className="text-xs text-gray-600">
+                              <span className="font-medium">Orders:</span> {totalOrders}
+                            </span>
+                          </div>
+                          
+                          {/* Date Created */}
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                            <span className="text-xs text-gray-600">
+                              <span className="font-medium">Created:</span> {createdDate}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -232,8 +423,25 @@ const Suppliers = () => {
                 <div className="flex items-start justify-between mb-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                        <Building2 className="h-6 w-6 text-primary-600" />
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm overflow-hidden">
+                        {selectedSupplier.image_url || selectedSupplier.logo_url || selectedSupplier.logo ? (
+                          <img 
+                            src={selectedSupplier.image_url || selectedSupplier.logo_url || selectedSupplier.logo} 
+                            alt={selectedSupplier.name || selectedSupplier.supplier_name || selectedSupplier.company_name || 'Supplier'}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to icon if image fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = '<svg class="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>';
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Building2 className="h-6 w-6 text-primary-600" />
+                        )}
                       </div>
                       <div>
                         <h2 className="text-2xl font-bold text-gray-900">
@@ -270,10 +478,26 @@ const Suppliers = () => {
                         {selectedSupplier.status}
                       </span>
                     )}
-                    <button className="btn-secondary flex items-center gap-2 text-sm">
-                      <Edit className="h-4 w-4" />
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setIsEditModalOpen(true)}
+                        className="btn-secondary flex items-center gap-2 text-sm"
+                      >
+                        <Edit className="h-4 w-4" />
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete "${selectedSupplier.name || selectedSupplier.supplier_name || selectedSupplier.company_name}"? This action cannot be undone.`)) {
+                            handleDeleteSupplier(selectedSupplier.id || selectedSupplier.supplier_id);
+                          }
+                        }}
+                        className="btn-secondary flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -672,6 +896,82 @@ const Suppliers = () => {
           )}
         </div>
       </div>
+
+      {/* Add Supplier Modal */}
+      {isAddModalOpen && (
+        <AddSupplierModal
+          onClose={() => setIsAddModalOpen(false)}
+          onSuccess={() => {
+            // Refresh suppliers list after successful creation
+            const fetchSuppliers = async () => {
+              setLoading(true);
+              setError(null);
+              try {
+                const result = await getSuppliers(
+                  pagination.page, 
+                  pagination.page_size, 
+                  searchTerm || undefined,
+                  sortBy,
+                  sortOrder
+                );
+                if (result.success) {
+                  setSuppliers(result.suppliers);
+                  setPagination(result.pagination);
+                } else {
+                  setError('Failed to fetch suppliers');
+                }
+              } catch (err: any) {
+                setError(err.message || 'Failed to fetch suppliers');
+              } finally {
+                setLoading(false);
+              }
+            };
+            fetchSuppliers();
+          }}
+        />
+      )}
+
+      {/* Edit Supplier Modal */}
+      {isEditModalOpen && selectedSupplier && (
+        <EditSupplierModal
+          supplier={selectedSupplier}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={() => {
+            // Refresh suppliers list after successful update
+            const fetchSuppliers = async () => {
+              setLoading(true);
+              setError(null);
+              try {
+                const result = await getSuppliers(
+                  pagination.page, 
+                  pagination.page_size, 
+                  searchTerm || undefined,
+                  sortBy,
+                  sortOrder
+                );
+                if (result.success) {
+                  setSuppliers(result.suppliers);
+                  setPagination(result.pagination);
+                  // Update selected supplier if it still exists
+                  const updatedSupplier = result.suppliers.find(
+                    (s: any) => (s.id || s.supplier_id) === (selectedSupplier.id || selectedSupplier.supplier_id)
+                  );
+                  if (updatedSupplier) {
+                    setSelectedSupplier(updatedSupplier);
+                  }
+                } else {
+                  setError('Failed to fetch suppliers');
+                }
+              } catch (err: any) {
+                setError(err.message || 'Failed to fetch suppliers');
+              } finally {
+                setLoading(false);
+              }
+            };
+            fetchSuppliers();
+          }}
+        />
+      )}
     </div>
   );
 };

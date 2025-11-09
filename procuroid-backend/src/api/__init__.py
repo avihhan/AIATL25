@@ -10,7 +10,12 @@ from services.database import (
     get_procurement_jobs,
     update_procurement_job,
     get_suppliers,
+    create_supplier,
+    update_supplier,
+    delete_supplier,
     call_quotation_agent,
+    update_profile,
+    get_profile,
 )
 from services.llm import extract_call_conclusion
 from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
@@ -189,15 +194,25 @@ def get_suppliers_endpoint():
     - page: Page number (default: 1)
     - page_size: Items per page (default: 10, max: 100)
     - search: Optional search term
+    - sort_by: Field to sort by (default: 'name')
+    - sort_order: Sort order 'asc' or 'desc' (default: 'asc')
     """
     try:
         # Get query parameters
         page = int(request.args.get("page", 1))
         page_size = int(request.args.get("page_size", 10))
         search = request.args.get("search", None)
+        sort_by = request.args.get("sort_by", "name")
+        sort_order = request.args.get("sort_order", "asc")
         
         # Get suppliers from database
-        result = get_suppliers(page=page, page_size=page_size, search=search)
+        result = get_suppliers(
+            page=page, 
+            page_size=page_size, 
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         
         if result.get("success"):
             return jsonify(result), 200
@@ -207,6 +222,72 @@ def get_suppliers_endpoint():
         return jsonify({"error": "Invalid page or page_size parameter"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/suppliers", methods=["POST"])
+@require_auth
+def create_supplier_endpoint():
+    """
+    Create a new supplier.
+    Request body should contain supplier information.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        # Create supplier in database
+        result = create_supplier(data)
+        
+        if result.get("success"):
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/suppliers/<supplier_id>", methods=["PATCH"])
+@require_auth
+def update_supplier_endpoint(supplier_id):
+    """
+    Update an existing supplier.
+    Request body should contain supplier information to update.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        # Update supplier in database
+        result = update_supplier(supplier_id, data)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/suppliers/<supplier_id>", methods=["DELETE"])
+@require_auth
+def delete_supplier_endpoint(supplier_id):
+    """
+    Delete an existing supplier.
+    """
+    try:
+        # Delete supplier from database
+        result = delete_supplier(supplier_id)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @api_bp.route("/elevenlabs/calls", methods=["POST"])
