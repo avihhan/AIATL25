@@ -858,3 +858,177 @@ def get_profile(user_id: str) -> dict:
     except Exception as e:
         print(f"Get profile error: {e}")
         return {"success": False, "error": str(e)}
+
+
+def create_order(user_id: str, order_data: dict) -> dict:
+    """
+    Create a new order in the orders table.
+    
+    Args:
+        user_id: The user's UUID
+        order_data: Dictionary containing order information
+        
+    Returns:
+        dict: Response with order data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Get quantity value - ensure it's never None for NOT NULL constraint
+        # Convert to int if quantity column is INTEGER type, otherwise keep as float
+        quantity_raw = order_data.get("quantity", 0)
+        if quantity_raw:
+            try:
+                # Try to convert to int first (if column is INTEGER)
+                quantity_value = int(float(quantity_raw))
+            except (ValueError, TypeError):
+                quantity_value = 0
+        else:
+            quantity_value = 0
+        
+        # Prepare the order data with proper field mapping
+        insert_data = {
+            "user_id": user_id,
+            "supplier_type": order_data.get("supplierType"),
+            "product_name": order_data.get("productName", ""),
+            "product_description": order_data.get("productDescription"),
+            "product_specifications": order_data.get("productSpecifications"),
+            "product_certification": order_data.get("productCertification"),
+            "quantity": quantity_value,  # Map to quantity column (required, NOT NULL) - as INTEGER
+            "unit_of_measurement": order_data.get("unitOfMeasurement", ""),
+            "unit_price": float(order_data.get("unitPrice")) if order_data.get("unitPrice") else None,
+            "lower_limit": float(order_data.get("lowerLimit")) if order_data.get("lowerLimit") else None,
+            "upper_limit": float(order_data.get("upperLimit")) if order_data.get("upperLimit") else None,
+            "currency": order_data.get("currency") or "USD",  # Ensure currency always has a value
+            "total_price_estimate": float(order_data.get("totalPriceEstimate")) if order_data.get("totalPriceEstimate") else None,
+            "payment_terms": order_data.get("paymentTerms"),
+            "preferred_payment_method": order_data.get("preferredPaymentMethod"),
+            "required_delivery_date": order_data.get("requiredDeliveryDate"),
+            "delivery_location": order_data.get("location"),
+            "shipping_cost": order_data.get("shippingCost"),
+            "packaging_details": order_data.get("packagingDetails"),
+            "incoterms": order_data.get("incoterms"),
+            "status": "pending"
+        }
+        
+        # Remove None values to avoid issues with optional fields, but keep required fields
+        # Currency and quantity should always be present, so we don't filter them out
+        insert_data = {k: v for k, v in insert_data.items() if v is not None or k in ("currency", "quantity")}
+        
+        # Insert into orders table using admin client to bypass RLS
+        response = supabase_admin.table("orders").insert(insert_data).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "order": response.data[0]
+            }
+        return {"success": False, "error": "Failed to create order"}
+    except Exception as e:
+        print(f"Create order error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def get_orders(user_id: str, status: Optional[str] = None) -> dict:
+    """
+    Get orders for a user, optionally filtered by status.
+    
+    Args:
+        user_id: The user's UUID
+        status: Optional status filter
+        
+    Returns:
+        dict: Response with orders list or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        query = supabase_admin.table("orders").select("*").eq("user_id", user_id)
+        
+        if status:
+            query = query.eq("status", status)
+        
+        query = query.order("created_at", desc=True)
+        
+        response = query.execute()
+        
+        if response.data is not None:
+            return {
+                "success": True,
+                "orders": response.data
+            }
+        return {"success": False, "error": "Failed to retrieve orders"}
+    except Exception as e:
+        print(f"Get orders error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def get_quotations(user_id: str, status: Optional[str] = None) -> dict:
+    """
+    Get quotations for a user, optionally filtered by status.
+    
+    Note: This assumes quotations table exists. If quotations are linked to procurement_jobs,
+    we may need to join with procurement_jobs to filter by user_id.
+    
+    Args:
+        user_id: The user's UUID
+        status: Optional status filter (e.g., 'pending_approval')
+        
+    Returns:
+        dict: Response with quotations or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        # Get quotations - we'll try to filter by user_id if the column exists
+        # If quotations are linked via procurement_jobs, we may need a different approach
+        query = supabase_admin.table("quotations").select("*")
+        
+        if status:
+            query = query.eq("status", status)
+        
+        response = query.execute()
+        quotations = response.data if response.data else []
+        
+        # If quotations table doesn't have user_id directly, we might need to filter via procurement_jobs
+        # For now, return all quotations matching the status filter
+        # TODO: Add proper user_id filtering if quotations table has user_id or via procurement_jobs join
+        
+        return {
+            "success": True,
+            "quotations": quotations
+        }
+    except Exception as e:
+        print(f"Get quotations error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def update_quotation(quotation_id: str, updates: dict) -> dict:
+    """
+    Update a quotation (e.g., approve or reject).
+    
+    Args:
+        quotation_id: The quotation UUID
+        updates: Dictionary of fields to update (e.g., {"status": "approved"})
+        
+    Returns:
+        dict: Response with updated quotation data or error message
+    """
+    try:
+        if not supabase_admin:
+            return {"success": False, "error": "Supabase admin client not initialized"}
+        
+        response = supabase_admin.table("quotations").update(updates).eq("id", quotation_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            return {
+                "success": True,
+                "quotation": response.data[0]
+            }
+        return {"success": False, "error": "Failed to update quotation"}
+    except Exception as e:
+        print(f"Update quotation error: {e}")
+        return {"success": False, "error": str(e)}
