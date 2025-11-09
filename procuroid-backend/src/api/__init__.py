@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from functools import wraps
 import json
 from datetime import datetime
+from typing import List, Dict
 from services.database import (
     verify_user_token,
     sign_up_user,
@@ -22,7 +23,11 @@ from services.database import (
     update_quotation,
 )
 from services.llm import extract_call_conclusion
-from services.elevenlabs import initiate_elevenlabs_call, ElevenLabsCallError
+from services.elevenlabs import (
+    initiate_elevenlabs_call,
+    initiate_elevenlabs_call_via_api,
+    ElevenLabsCallError
+)
 
 # Create a blueprint for API routes
 api_bp = Blueprint('api', __name__)
@@ -315,7 +320,11 @@ def initiate_elevenlabs_call_endpoint():
 
     if not to_number:
         return jsonify({"error": "'to' (destination phone number) is required."}), 400
+    
+    if not agent_id:
+        return jsonify({"error": "'agent_id' is required."}), 400
 
+    # Build metadata payload
     metadata_payload = dict(metadata or {})
     user_id = request.user.get("id") if isinstance(request.user, dict) else None
     if user_id is not None:
@@ -327,8 +336,10 @@ def initiate_elevenlabs_call_endpoint():
     metadata_payload = {key: value for key, value in metadata_payload.items() if value is not None}
 
     try:
-        call_response = initiate_elevenlabs_call(
-            to_number,
+        # Use the simpler ElevenLabs API approach (recommended)
+        # This calls ElevenLabs API which handles Twilio internally
+        call_response = initiate_elevenlabs_call_via_api(
+            to=to_number,
             agent_id=agent_id,
             metadata=metadata_payload or None,
         )
@@ -377,6 +388,53 @@ def call_quotation_agent_endpoint():
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/twiml/elevenlabs", methods=["POST", "GET"])
+def generate_elevenlabs_twiml():
+    """
+    Generate TwiML to connect Twilio call to ElevenLabs.
+    This endpoint can be used as the webhook URL when creating Twilio calls.
+    
+    Query parameters:
+    - agent_id: ElevenLabs agent ID
+    - userId: User ID to pass to ElevenLabs
+    - jobId: Optional job ID
+    """
+    from flask import Response
+    from urllib.parse import urlencode
+    
+    # Get parameters from query string (Twilio will pass these along)
+    agent_id = request.args.get("agent_id")
+    user_id = request.args.get("userId")
+    job_id = request.args.get("jobId")
+    
+    if not agent_id:
+        return Response(
+            '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Agent ID is required</Say><Hangup/></Response>',
+            mimetype='text/xml'
+        ), 400
+    
+    # Build ElevenLabs webhook URL with parameters
+    elevenlabs_url = "https://api.us.elevenlabs.io/twilio/inbound_call"
+    params = {}
+    if agent_id:
+        params["agent_id"] = agent_id
+    if user_id:
+        params["userId"] = user_id
+    if job_id:
+        params["jobId"] = job_id
+    
+    if params:
+        elevenlabs_url = f"{elevenlabs_url}?{urlencode(params)}"
+    
+    # Generate TwiML that redirects to ElevenLabs
+    twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Redirect method="POST">{elevenlabs_url}</Redirect>
+</Response>'''
+    
+    return Response(twiml, mimetype='text/xml')
 
 
 @api_bp.route("/quotation-agent/webhook", methods=["POST"])
