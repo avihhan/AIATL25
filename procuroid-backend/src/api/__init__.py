@@ -660,8 +660,13 @@ def quotation_agent_transcript():
                 print(f"📝 Transcript length: {len(transcript_text)} characters")
                 print(f"📄 Summary length: {len(summary or '')} characters")
                 
+                # Check if supabase_admin is available
+                if not supabase_admin:
+                    print(f"❌ Supabase admin client not initialized")
+                    return jsonify({"success": False, "error": "Database client not available"}), 500
+                
                 # Try to update existing record first
-                update_result = supabase.table("supplier_calls")\
+                update_result = supabase_admin.table("supplier_calls")\
                     .update({
                         "transcript": transcript_text,
                         "summary": summary or "",
@@ -682,7 +687,7 @@ def quotation_agent_transcript():
                     # Extract supplier info from call metadata if available
                     supplier_name = call_report.get("metadata", {}).get("seller_company_name", "Unknown Supplier")
                     
-                    insert_result = supabase.table("supplier_calls")\
+                    insert_result = supabase_admin.table("supplier_calls")\
                         .insert({
                             "call_id": call_id,
                             "supplier_name": supplier_name,
