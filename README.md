@@ -30,3 +30,5 @@ postgresql
 python
 supabase
 typescript
+
+This is a read me page, please go through the whole page. Edited on: 02/11/2026
